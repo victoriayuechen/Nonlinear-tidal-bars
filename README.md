@@ -1,3 +1,1 @@
-# CSE Project
-
-Contributors: 
+# Project 
