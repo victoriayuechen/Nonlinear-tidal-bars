@@ -35,6 +35,9 @@ Make a bottom pattern h, NΔy wider, with N ∈ ℤ, by streching and interpolat
 returns the new h and the new y grid
 see docu of Interpolations package for details.
 """
+
+
+#this is an edit
 function add_NΔy(h,x,y,N)
     Δy = y[2]-y[1]
     Ny = length(y)
