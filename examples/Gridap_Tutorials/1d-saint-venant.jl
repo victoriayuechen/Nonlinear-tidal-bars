@@ -23,7 +23,7 @@ degree = order
 Ω = Triangulation(model)
 dΩ = Measure(Ω,degree)
 
-res(u,v,h) = ∫(∂t(u)*v + v⋅∇(u) + v⋅∇(h))dΩ
+res((u,v),(h,v)) = ∫(∂t(u)*v + (VectorValue(1.0)⋅∇(u)) * v + (VectorValue(1.0)⋅∇(h)) * v)dΩ
 op = TransientFEOperator(res,X,Y)
 
 ls = LUSolver()

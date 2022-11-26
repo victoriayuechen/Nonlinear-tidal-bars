@@ -7,9 +7,9 @@ dir = "examples/Gridap_Tutorials/output_conv_dif_eq"
 
 
 #Making of the domain, this can very easily be changed to a 1D domain
-domain = (0,1,0,1)
-partition = (100,100)
-model = CartesianDiscreteModel(domain,partition;isperiodic=(true,true))
+domain = (0,1)
+partition = (100)
+model = CartesianDiscreteModel(domain,partition;isperiodic=(true,))
 
 order = 1
 refFE = ReferenceFE(lagrangian,Float64,order)
@@ -25,7 +25,7 @@ degree = 2
 Ω = Interior(model)
 dΩ = Measure(Ω,degree)
 
-velocity = VectorValue(1.0,0.0)
+velocity = VectorValue(1.0)
 
 ff(t) = 0.0
 res(t,u,v) = ∫(∂t(u)*v + 0.01*(∇(v)⋅∇(u)) + (velocity ⋅  ∇(u))*v - ff(t)*v)dΩ
