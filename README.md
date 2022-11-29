@@ -19,4 +19,6 @@ This is a repository for a shallow water equations solver written in Julia.
 
 <a id="3">[3]</a> Monajemi, H. (2009). <i>Data Assimilation for Shallow Water Waves: Application to Flood Forecasting</i>
 
-<a id="4">[4]</a> Jacobs, C. T., &#38; Piggott, M. D. (2015). Firedrake-Fluids v0.1: Numerical modelling of shallow water flows using an automated solution framework. <i>Geoscientific Model Development</i>, <i>8</i>(3), 533–547. https://doi.org/10.5194/gmd-8-533-2015
+<a id="4">[4]</a> Mixed finite elements for numerical weather prediction Jacobs, C. T., &#38; Piggott, M. D. (2015). Firedrake-Fluids v0.1: Numerical modelling of shallow water flows using an automated solution framework. <i>Geoscientific Model Development</i>, <i>8</i>(3), 533–547. https://doi.org/10.5194/gmd-8-533-2015
+
+
