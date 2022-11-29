@@ -33,7 +33,7 @@ function Gridap.get_free_dof_values(functions...)
 
 
 function Shallow_water_theta_newton(
-        order,degree,h₀,u₀,f,topography,α,
+        order,degree,h₀,u₀,α,
         linear_solver::Gridap.Algebra.LinearSolver=Gridap.Algebra.BackslashSolver(),
         sparse_matrix_type::Type{<:AbstractSparseMatrix}=SparseMatrixCSC{Float64,Int})
     #Create model
@@ -45,26 +45,26 @@ function Shallow_water_theta_newton(
     
     partition = (100,100)
     dir = "swe-solver/output_linear_swe"
-    model = CartesianDiscreteModel(domain,partition;isperiodic=(true,true))
+    model = CartesianDiscreteModel(domain,partition)
 
 
-    # labels = get_face_labeling(model)
-    # add_tag_from_tags!(labels,"bottom",[1,2,5])
-    # add_tag_from_tags!(labels,"left",[7])
-    # add_tag_from_tags!(labels,"right",[8])
-    # add_tag_from_tags!(labels,"top",[3,4,6])
-    # add_tag_from_tags!(labels,"inside",[9])
-    # nuemanntaggs = ["left","right"]
+    labels = get_face_labeling(model)
+    add_tag_from_tags!(labels,"bottom",[1,2,5])
+    add_tag_from_tags!(labels,"left",[7])
+    add_tag_from_tags!(labels,"right",[8])
+    add_tag_from_tags!(labels,"top",[3,4,6])
+    add_tag_from_tags!(labels,"inside",[9])
+    nuemanntaggs = ["left","right"]
 
     Ω = Triangulation(model)
     dΩ = Measure(Ω,degree)
-    #Γ = BoundaryTriangulation(model,tags=nuemanntaggs)
-    #dΓ = Measure(Γ,degree)
+    Γ = BoundaryTriangulation(model,tags=nuemanntaggs)
+    dΓ = Measure(Γ,degree)
     
 
     reffe_rt = ReferenceFE(raviart_thomas,Float64,order)
-    V = FESpace(model,reffe_rt;conformity=:HDiv)
-    U = TrialFESpace(V)
+    V = FESpace(model,reffe_rt;conformity=:HDiv,dirichlet_tags = "boundary")
+    U = TrialFESpace(V,VectorValue(0.0,0.0))
 
     reffe_lgn = ReferenceFE(lagrangian,Float64,order)
     Q = FESpace(model,reffe_lgn;conformity=:L2)
@@ -77,7 +77,6 @@ function Shallow_water_theta_newton(
     X = MultiFieldFESpace([V,Q])#∇u, ∇h
     Y = MultiFieldFESpace([U,P])
 
-    b = interpolate_everywhere(topography,P)
     E = [0 -1; 1 0]
     #Create initial solutions
     a1(u,v) = ∫(v⋅u)dΩ
@@ -88,6 +87,7 @@ function Shallow_water_theta_newton(
     l2(v) = ∫(v*h₀)dΩ
     hn = solve(AffineFEOperator(a2,l2,P,Q))
 
+    b = 2.0
     unv,hnv = get_free_dof_values(un,hn)
     E = [0 -1; 1 0 ]
     uhn = uh(un,hn,X,Y,dΩ)
@@ -102,7 +102,7 @@ function Shallow_water_theta_newton(
                 #+ α*dt*f*(w⋅(E×u))
                 #+ α*dt*f*(w⋅(E×un))
                 ∫((w⋅u) - g*α*dt*DIV(w)*h - w⋅un - α*dt*g*DIV(w)*hn
-                + ϕ*h + α*dt*(b+3)*ϕ*DIV(u) -ϕ*hn + α*dt*(b+3)*ϕ*DIV(u))dΩ
+                + ϕ*h + α*dt*(b)*ϕ*DIV(u) -ϕ*hn + α*dt*(b)*ϕ*DIV(u))dΩ
             end
 
             assem = SparseMatrixAssembler(sparse_matrix_type,Vector{Float64},X,Y)
@@ -130,12 +130,13 @@ function Shallow_water_theta_newton(
 end
 
 function h₀((x,y))
-    h = 2*sin(π*x)*sin(π*y)
+    h = sin(2*π*x)*sin(2*π*y)
     h
 end
 
 function topography((x,y))
-    0.0
+    p = 0.5*sin(π*x)*sin(π*y)
+    p
 end
 
 function u₀((x,y))
@@ -143,4 +144,4 @@ function u₀((x,y))
     u
 end
 
-Shallow_water_theta_newton(1,3,h₀,u₀,0.0,topography,0.5)
+Shallow_water_theta_newton(1,3,h₀,u₀,0.5)
