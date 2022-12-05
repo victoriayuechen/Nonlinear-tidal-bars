@@ -1,3 +1,4 @@
 .vscode/
 output/
 *.vtu
+*.DS_Store
