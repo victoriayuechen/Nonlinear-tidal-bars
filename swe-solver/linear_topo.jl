@@ -52,7 +52,7 @@ function Gridap.get_free_dof_values(functions...)
 
 
 function Shallow_water_theta_newton(
-        order,degree,h₀,u₀,α,topography,
+        order,degree,h₀,u₀,topography,
         linear_solver::Gridap.Algebra.LinearSolver=Gridap.Algebra.BackslashSolver(),
         sparse_matrix_type::Type{<:AbstractSparseMatrix}=SparseMatrixCSC{Float64,Int})
     #Create model
@@ -62,7 +62,7 @@ function Shallow_water_theta_newton(
     dy = 1
     domain = (0,B,0,L)
     
-    partition = (100,100)
+    partition = (50,50)
     dir = "swe-solver/output_linear_swe"
     model = CartesianDiscreteModel(domain,partition)
 
@@ -110,7 +110,9 @@ function Shallow_water_theta_newton(
     l2(v) = ∫(v*h₀)dΩ
     hn = solve(AffineFEOperator(a2,l2,P,Q))
 
-    b = interpolate_everywhere(topography,P(0.0))
+    a3(u,v) = ∫(v*u)dΩ
+    l3(v) = ∫(v*topography)dΩ
+    b = solve(AffineFEOperator(a3,l3,P,Q))
     unv,hnv = get_free_dof_values(un,hn)
     F₀ = clone_fe_function(V,un)
     compute_mass_flux!(F₀,dΩ,V,RTMMchol,un*hn)
@@ -126,15 +128,16 @@ function Shallow_water_theta_newton(
 
     op = TransientFEOperator(res,jac,jac_t,X,Y)
     nls = NLSolver(show_trace=true)
-    ode_solver = ThetaMethod(nls,50,0.5)
-    x = solve(ode_solver,op,uhn,0.0,5000)
+    Tend = 2000
+    ode_solver = ThetaMethod(nls,10,0.5)
+    x = solve(ode_solver,op,uhn,0.0,Tend)
     dir = "swe-solver/1d-topo-output_var"
     if isdir(dir)
         output_file = paraview_collection(joinpath(dir,"1d-topo-output"))do pvd
             for (x,t) in x
                 u,h,F = x
-                pvd[t] = createvtk(Ω,joinpath(dir,"1d-topo$t.vtu"),cellfields=["u"=>u,"h"=>h])
-                println("done $t/10")
+                pvd[t] = createvtk(Ω,joinpath(dir,"1d-topo$t.vtu"),cellfields=["u"=>u,"h"=>(h+b),"b"=>b])
+                println("done $t/$Tend")
             end
         end
     else
@@ -142,24 +145,20 @@ function Shallow_water_theta_newton(
         output_file = paraview_collection(joinpath(dir,"1d-topo-output")) do pvd
             for (x,t) in x
                 u,h,F = x
-                pvd[t] = createvtk(Ω,joinpath(dir,"1d-topo$t.vtu"),cellfields=["u"=>u,"h"=>h])
-                println("done $t/10")
+                pvd[t] = createvtk(Ω,joinpath(dir,"1d-topo$t.vtu"),cellfields=["u"=>u,"h"=>(h+b),"b"=>b])
+                println("done $t/$Tend")
             end
         end
     end
 end
 
 function h₀((x,y))
-    h = 1 + 0.5*sin(π*x)*sin(π*y)
+    h =  1*sin(π*x)*sin(π*y)
     h
 end
 
 function topography((x,y))
-    if (x<0.5)
-        p=1.0
-    else
-        p=0.0
-    end
+    p = 0.3*sin(π*x)
     p
 end
 
@@ -168,4 +167,4 @@ function u₀((x,y))
     u
 end
 
-Shallow_water_theta_newton(1,3,h₀,u₀,topography,0.5)
+Shallow_water_theta_newton(1,3,h₀,u₀,topography)
