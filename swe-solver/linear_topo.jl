@@ -129,9 +129,9 @@ function Shallow_water_theta_newton(
     op = TransientFEOperator(res,jac,jac_t,X,Y)
     nls = NLSolver(show_trace=true)
     Tend = 2000
-    ode_solver = ThetaMethod(nls,10,0.5)
+    ode_solver = ThetaMethod(nls,20,0.5)
     x = solve(ode_solver,op,uhn,0.0,Tend)
-    dir = "swe-solver/1d-topo-output_var"
+    dir = "swe-solver/1d-topo-output_zero"
     if isdir(dir)
         output_file = paraview_collection(joinpath(dir,"1d-topo-output"))do pvd
             for (x,t) in x
@@ -153,12 +153,12 @@ function Shallow_water_theta_newton(
 end
 
 function h₀((x,y))
-    h =  1*sin(π*x)*sin(π*y)
+    h = -topography((x,y)) +  1 + 0.3*sin(π*x)*sin(π*y)
     h
 end
 
 function topography((x,y))
-    p = 0.3*sin(π*x)
+    p = 0.0
     p
 end
 
@@ -166,5 +166,5 @@ function u₀((x,y))
     u = VectorValue(0.0,0.0)
     u
 end
-
-Shallow_water_theta_newton(1,3,h₀,u₀,topography)
+f=
+Shallow_water_theta_newton(1,3,h₀,u₀,topography,f)
