@@ -119,18 +119,18 @@ function Shallow_water_theta_newton(
     un, hn,F = uhn
 
     g = 9.81
-    res(t,(u,h,F),(w,ϕ,w2)) = ∫(∂t(u)⋅w -g*DIV(w)*h + ∂t(h)*ϕ + ϕ*DIV(F) + w2⋅(F - u*h))dΩ
+    res(t,(u,h,F),(w,ϕ,w2)) = ∫(∂t(u)⋅w -g*DIV(w)*(b+h) + ∂t(h)*ϕ + ϕ*DIV(F) + w2⋅(F - u*h))dΩ
     jac(t,(u,h,F),(du,dh,dF),(w,ϕ,w2)) = ∫(-g*DIV(w)*dh + ϕ*DIV(dF) + w2⋅(dF -du*h -u*dh))dΩ
     jac_t(t,(u,h),(dut,dht),(w,ϕ)) = ∫(dut⋅w + dht*ϕ)dΩ
 
 
     op = TransientFEOperator(res,jac,jac_t,X,Y)
     nls = NLSolver(show_trace=true)
-    ode_solver = ThetaMethod(nls,10,0.5)
-    x = solve(ode_solver,op,uhn,0.0,1000)
-    dir = "swe-solver/1d-topo-output"
+    ode_solver = ThetaMethod(nls,50,0.5)
+    x = solve(ode_solver,op,uhn,0.0,5000)
+    dir = "swe-solver/1d-topo-output_var"
     if isdir(dir)
-        output_file = paraview_collection("swe-solver/1d-topo-output")do pvd
+        output_file = paraview_collection(joinpath(dir,"1d-topo-output"))do pvd
             for (x,t) in x
                 u,h,F = x
                 pvd[t] = createvtk(Ω,joinpath(dir,"1d-topo$t.vtu"),cellfields=["u"=>u,"h"=>h])
@@ -139,7 +139,7 @@ function Shallow_water_theta_newton(
         end
     else
         mkdir(dir)
-        output_file = paraview_collection("swe-solver/1d-topo-output") do pvd
+        output_file = paraview_collection(joinpath(dir,"1d-topo-output")) do pvd
             for (x,t) in x
                 u,h,F = x
                 pvd[t] = createvtk(Ω,joinpath(dir,"1d-topo$t.vtu"),cellfields=["u"=>u,"h"=>h])
@@ -150,12 +150,16 @@ function Shallow_water_theta_newton(
 end
 
 function h₀((x,y))
-    h = 3 + 0.5*sin(π*x)*sin(π*y)
+    h = 1 + 0.5*sin(π*x)*sin(π*y)
     h
 end
 
 function topography((x,y))
-    p = 1.0
+    if (x<0.5)
+        p=1.0
+    else
+        p=0.0
+    end
     p
 end
 
