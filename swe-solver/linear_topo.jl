@@ -6,6 +6,7 @@ using SparseMatricesCSR
 using SparseArrays
 using WriteVTK
 using LinearAlgebra
+using LineSearches: BackTracking
 
 #Solves linear shallow water equations on a 2d plane
 
@@ -62,7 +63,7 @@ function Shallow_water_theta_newton(
     dy = 1
     domain = (0,B,0,L)
     
-    partition = (50,50)
+    partition = (100,100)
     dir = "swe-solver/output_linear_swe"
     model = CartesianDiscreteModel(domain,partition)
 
@@ -73,23 +74,24 @@ function Shallow_water_theta_newton(
     add_tag_from_tags!(labels,"right",[8])
     add_tag_from_tags!(labels,"top",[3,4,6])
     add_tag_from_tags!(labels,"inside",[9])
-    nuemanntaggs = ["left","right"]
+    nuemanntaggs = ["left","right","top","bottom"]
 
     Ω = Triangulation(model)
     dΩ = Measure(Ω,degree)
     dω = Measure(Ω,degree,ReferenceDomain())
-    Γ = BoundaryTriangulation(model,tags=nuemanntaggs)
+    Γ = BoundaryTriangulation(model,tags="boundary")
+    nΓ = get_normal_vector(Γ)
     dΓ = Measure(Γ,degree)
     
 
     
 
     reffe_rt = ReferenceFE(raviart_thomas,Float64,order)
-    V = FESpace(model,reffe_rt;conformity=:HDiv)
+    V = TestFESpace(model,reffe_rt;conformity=:HDiv,dirichlet_tags="boundary")
     U = TransientTrialFESpace(V)
 
     reffe_lgn = ReferenceFE(lagrangian,Float64,order)
-    Q = FESpace(model,reffe_lgn;conformity=:L2)
+    Q = TestFESpace(model,reffe_lgn;conformity=:L2)
     P = TransientTrialFESpace(Q)
 
 
@@ -114,27 +116,28 @@ function Shallow_water_theta_newton(
     unv,hnv = get_free_dof_values(un,hn)
     F₀ = clone_fe_function(V,un)
     compute_mass_flux!(F₀,dΩ,V,RTMMchol,un*hn)
-    E = [0 -1; 1 0 ]
+    
+    coriolis((x,y)) = [0 -1;1 0]
     uhn = uh(un,hn,F₀,X,Y,dΩ)
     un, hn,F = uhn
-
+    A = [0 -1; 1 0]
     forcfunc(t) = VectorValue(0.5*π*cos(π*t),0)  
 
     g = 9.81
-    res(t,(u,h,F),(w,ϕ,w2)) = ∫(∂t(u)⋅w -g*(∇⋅(w))*(b+h) + ∂t(h)*ϕ  + w2⋅(F - u*h) - forcfunc(t)⋅w)dΩ + ∫(ϕ*DIV(F))dω
-    jac(t,(u,h,F),(du,dh,dF),(w,ϕ,w2)) = ∫(-g*(∇⋅(w))*dh  + w2⋅(dF -du*h -u*dh))dΩ + ∫(ϕ*DIV(dF))dω
+    res(t,(u,h,F),(w,ϕ,w2)) = ∫(∂t(u)⋅w -g*(∇⋅(w))*(b+h)  + ∂t(h)*ϕ  + w2⋅(F - u*h))dΩ + ∫(ϕ*DIV(F))dω + ∫(g*(h+b)*(w⋅nΓ) )dΓ
+    jac(t,(u,h,F),(du,dh,dF),(w,ϕ,w2)) = ∫(-g*(∇⋅(w))*dh  + w2⋅(dF -du*h -u*dh))dΩ + ∫(ϕ*DIV(dF))dω  + ∫(g*dh*(w⋅nΓ))dΓ
     jac_t(t,(u,h),(dut,dht),(w,ϕ)) = ∫(dut⋅w + dht*ϕ)dΩ
 
 
     op = TransientFEOperator(res,jac,jac_t,X,Y)
-    nls = NLSolver(show_trace=true)
+    nls = NLSolver(show_trace=true,linesearch=BackTracking())
     Tend = 5
     ode_solver = ThetaMethod(nls,0.1,0.5)
     x = solve(ode_solver,op,uhn,0.0,Tend)
     dir = "swe-solver/1d-topo-output_zero"
     if isdir(dir)
         output_file = paraview_collection(joinpath(dir,"1d-topo-output"))do pvd
-            pvd[0.0] = createvtk(Ω,joinpath(dir,"1d-topo0.0.vtu"),cellfields=["u"=>un,"h"=>(hn+b),"b"=>b])
+            #pvd[0.0] = createvtk(Ω,joinpath(dir,"1d-topo0.0.vtu"),cellfields=["u"=>un,"h"=>(hn+b),"b"=>b])
             for (x,t) in x
                 u,h,F = x
                 pvd[t] = createvtk(Ω,joinpath(dir,"1d-topo$t.vtu"),cellfields=["u"=>u,"h"=>(h+b),"b"=>b])
@@ -144,7 +147,7 @@ function Shallow_water_theta_newton(
     else
         mkdir(dir)
         output_file = paraview_collection(joinpath(dir,"1d-topo-output")) do pvd
-            pvd[0.0] = createvtk(Ω,joinpath(dir,"1d-topo0.0.vtu"),cellfields=["u"=>un,"h"=>(hn+b),"b"=>b])
+            #pvd[0.0] = createvtk(Ω,joinpath(dir,"1d-topo0.0.vtu"),cellfields=["u"=>un,"h"=>(hn+b),"b"=>b])
             for (x,t) in x
                 u,h,F = x
                 pvd[t] = createvtk(Ω,joinpath(dir,"1d-topo$t.vtu"),cellfields=["u"=>u,"h"=>(h+b),"b"=>b])
@@ -155,12 +158,12 @@ function Shallow_water_theta_newton(
 end
 
 function h₀((x,y))
-    h = -topography((x,y)) +  1 
+    h = -topography((x,y)) +  1  + 1*exp(-10*(x-2.5)^2 -10*(y-2.5)^2)
     h
 end
 
 function topography((x,y))
-    p = 0.0
+    p = 0.8*exp(-5*(x-5)^2)
     p
 end
 
