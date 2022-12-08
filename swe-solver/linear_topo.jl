@@ -65,7 +65,7 @@ function Shallow_water_theta_newton(
     
     partition = (100,100)
     dir = "swe-solver/output_linear_swe"
-    model = CartesianDiscreteModel(domain,partition)
+    model = CartesianDiscreteModel(domain,partition;isperiodic=(true,false))
 
 
     labels = get_face_labeling(model)
@@ -74,24 +74,24 @@ function Shallow_water_theta_newton(
     add_tag_from_tags!(labels,"right",[8])
     add_tag_from_tags!(labels,"top",[3,4,6])
     add_tag_from_tags!(labels,"inside",[9])
-    nuemanntaggs = ["left","right","top","bottom"]
+    DC = ["top","bottom"]
 
     Ω = Triangulation(model)
     dΩ = Measure(Ω,degree)
     dω = Measure(Ω,degree,ReferenceDomain())
-    Γ = BoundaryTriangulation(model,tags="boundary")
+    Γ = BoundaryTriangulation(model,tags=DC)
     nΓ = get_normal_vector(Γ)
     dΓ = Measure(Γ,degree)
     
 
     
 
-    reffe_rt = ReferenceFE(raviart_thomas,Float64,order)
-    V = TestFESpace(model,reffe_rt;conformity=:HDiv,dirichlet_tags="boundary")
+    reffe_rt = ReferenceFE(lagrangian,VectorValue{2,Float64},order)
+    V = TestFESpace(model,reffe_rt;dirichlet_tags=DC)
     U = TransientTrialFESpace(V)
 
     reffe_lgn = ReferenceFE(lagrangian,Float64,order)
-    Q = TestFESpace(model,reffe_lgn;conformity=:L2)
+    Q = TestFESpace(model,reffe_lgn)
     P = TransientTrialFESpace(Q)
 
 
@@ -124,8 +124,8 @@ function Shallow_water_theta_newton(
     forcfunc(t) = VectorValue(0.5*π*cos(π*t),0)  
 
     g = 9.81
-    res(t,(u,h,F),(w,ϕ,w2)) = ∫(∂t(u)⋅w -g*(∇⋅(w))*(b+h)  + ∂t(h)*ϕ  + w2⋅(F - u*h))dΩ + ∫(ϕ*DIV(F))dω + ∫(g*(h+b)*(w⋅nΓ) )dΓ
-    jac(t,(u,h,F),(du,dh,dF),(w,ϕ,w2)) = ∫(-g*(∇⋅(w))*dh  + w2⋅(dF -du*h -u*dh))dΩ + ∫(ϕ*DIV(dF))dω  + ∫(g*dh*(w⋅nΓ))dΓ
+    res(t,(u,h,F),(w,ϕ,w2)) = ∫(∂t(u)⋅w -g*(∇⋅(w))*(b+h)  + ∂t(h)*ϕ  + w2⋅(F - u*h) + ϕ*(∇⋅(F)))dΩ  + ∫(g*(h+b)*(w⋅nΓ))dΓ 
+    jac(t,(u,h,F),(du,dh,dF),(w,ϕ,w2)) = ∫(-g*(∇⋅(w))*dh  + w2⋅(dF -du*h -u*dh) + ϕ*(∇⋅(dF)))dΩ   + ∫(g*dh*(w⋅nΓ))dΓ
     jac_t(t,(u,h),(dut,dht),(w,ϕ)) = ∫(dut⋅w + dht*ϕ)dΩ
 
 
