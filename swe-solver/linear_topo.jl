@@ -121,11 +121,11 @@ function Shallow_water_theta_newton(
     uhn = uh(un,hn,F₀,X,Y,dΩ)
     un, hn,F = uhn
     A = [0 -1; 1 0]
-    forcfunc(t) = VectorValue(0.5*π*cos(π*t),0)  
+    forcfunc(t) = VectorValue(0.5,0)  
 
     g = 9.81
-    res(t,(u,h,F),(w,ϕ,w2)) = ∫(∂t(u)⋅w -g*(∇⋅(w))*(b+h)  + ∂t(h)*ϕ  + w2⋅(F - u*h) + ϕ*(∇⋅(F)))dΩ  + ∫(g*(h+b)*(w⋅nΓ))dΓ 
-    jac(t,(u,h,F),(du,dh,dF),(w,ϕ,w2)) = ∫(-g*(∇⋅(w))*dh  + w2⋅(dF -du*h -u*dh) + ϕ*(∇⋅(dF)))dΩ   + ∫(g*dh*(w⋅nΓ))dΓ
+    res(t,(u,h,F),(w,ϕ,w2)) = ∫(∂t(u)⋅w -g*(∇⋅(w))*(b+h)  + ∂t(h)*ϕ  + w2⋅(F - u*h) + ϕ*(∇⋅(F))-forcfunc(t)⋅w)dΩ + ∫(g*(h+b)*(w⋅nΓ))dΓ 
+    jac(t,(u,h,F),(du,dh,dF),(w,ϕ,w2)) = ∫(-g*(∇⋅(w))*dh  + w2⋅(dF -du*h -u*dh) + ϕ*(∇⋅(dF)))dΩ + ∫(g*dh*(w⋅nΓ))dΓ
     jac_t(t,(u,h),(dut,dht),(w,ϕ)) = ∫(dut⋅w + dht*ϕ)dΩ
 
 
@@ -158,7 +158,7 @@ function Shallow_water_theta_newton(
 end
 
 function h₀((x,y))
-    h = -topography((x,y)) +  1  + 1*exp(-10*(x-2.5)^2 -10*(y-2.5)^2)
+    h = -topography((x,y)) +  1  #+ 1*exp(-10*(x-2.5)^2 -10*(y-2.5)^2)
     h
 end
 
