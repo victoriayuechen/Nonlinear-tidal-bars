@@ -1,2 +1,5 @@
 .vscode/
 output/
+*.DS_Store
+*.vtu
+*.pvd

@@ -64,7 +64,7 @@ function Shallow_water_theta_newton(
     domain = (0,B,0,L)
     
     partition = (100,100)
-    dir = "swe-solver/output_linear_swe"
+    dir = "lswe/output"
     model = CartesianDiscreteModel(domain,partition)
 
 
@@ -134,7 +134,7 @@ function Shallow_water_theta_newton(
     Tend = 5
     ode_solver = ThetaMethod(nls,0.1,0.5)
     x = solve(ode_solver,op,uhn,0.0,Tend)
-    dir = "swe-solver/1d-topo-output_zero"
+    dir = "lswe/output"
     if isdir(dir)
         output_file = paraview_collection(joinpath(dir,"1d-topo-output"))do pvd
             #pvd[0.0] = createvtk(Ω,joinpath(dir,"1d-topo0.0.vtu"),cellfields=["u"=>un,"h"=>(hn+b),"b"=>b])
