@@ -7,6 +7,7 @@ using SparseArrays
 using WriteVTK
 using LinearAlgebra
 using LineSearches: BackTracking
+using GridapGmsh
 
 #Solves linear shallow water equations on a 2d plane
 
@@ -63,18 +64,12 @@ function Shallow_water_theta_newton(
     dy = 1
     domain = (0,B,0,L)
     
-    partition = (100,100)
+    partition = (50,50)
     dir = "swe-solver/output_linear_swe"
-    model = CartesianDiscreteModel(domain,partition;isperiodic=(false,false))
+    model = GmshDiscreteModel("swe-solver/periodic_mesh.msh")
 
 
-    labels = get_face_labeling(model)
-    add_tag_from_tags!(labels,"bottom",[1,2,5])
-    add_tag_from_tags!(labels,"left",[7])
-    add_tag_from_tags!(labels,"right",[8])
-    add_tag_from_tags!(labels,"top",[3,4,6])
-    add_tag_from_tags!(labels,"inside",[9])
-    DC = ["top","bottom","right","left"]
+    DC = ["left","right"]
 
     Ω = Triangulation(model)
     dΩ = Measure(Ω,degree)
@@ -87,7 +82,7 @@ function Shallow_water_theta_newton(
     
 
     reffe_rt = ReferenceFE(lagrangian,VectorValue{2,Float64},order)
-    V = TestFESpace(model,reffe_rt)
+    V = TestFESpace(model,reffe_rt;dirichlet_tags=DC)
     U = TransientTrialFESpace(V)
 
     reffe_lgn = ReferenceFE(lagrangian,Float64,order)
@@ -121,11 +116,11 @@ function Shallow_water_theta_newton(
     uhn = uh(un,hn,F₀,X,Y,dΩ)
     un, hn,F = uhn
     A = [0 -1; 1 0]
-    forcfunc(t) = VectorValue(0.0,0.0)  
+    forcfunc(t) = VectorValue(0.5*cos(π*(1/2.5)*t),0)  
 
     g = 9.81
-    res(t,(u,h,F),(w,ϕ,w2)) = ∫(∂t(u)⋅w -g*(∇⋅(w))*(b+h)  + ∂t(h)*ϕ  + w2⋅(F - u*h) - F⋅(∇(ϕ))-forcfunc(t)⋅w)dΩ + ∫(g*(h+b)*(w⋅nΓ))dΓ 
-    jac(t,(u,h,F),(du,dh,dF),(w,ϕ,w2)) = ∫(-g*(∇⋅(w))*dh  + w2⋅(dF -du*h -u*dh) - dF⋅(∇(ϕ)))dΩ + ∫(g*dh*(w⋅nΓ))dΓ
+    res(t,(u,h,F),(w,ϕ,w2)) = ∫(∂t(u)⋅w -g*(∇⋅(w))*(b+h)  + ∂t(h)*ϕ  + w2⋅(F - u*h) + ϕ*(∇⋅(F))-forcfunc(t)⋅w)dΩ + ∫(g*(h+b)*(w⋅nΓ))dΓ 
+    jac(t,(u,h,F),(du,dh,dF),(w,ϕ,w2)) = ∫(-g*(∇⋅(w))*dh  + w2⋅(dF -du*h -u*dh) + ϕ*(∇⋅(dF)))dΩ + ∫(g*dh*(w⋅nΓ))dΓ
     jac_t(t,(u,h),(dut,dht),(w,ϕ)) = ∫(dut⋅w + dht*ϕ)dΩ
 
 
@@ -158,12 +153,12 @@ function Shallow_water_theta_newton(
 end
 
 function h₀((x,y))
-    h = -topography((x,y)) +  1  + 2*exp(-10*(x-5)^2 -10*(y-5)^2)
+    h = -topography((x,y)) +  1  #+ 1*exp(-10*(x-2.5)^2 -10*(y-2.5)^2)
     h
 end
 
 function topography((x,y))
-    p = 0.0
+    p = 0.8*exp(-5*(x-5)^2-5*(y-2.5)^2)+0.8*exp(-5*(x-5)^2-5*(y-7.5)^2)
     p
 end
 
