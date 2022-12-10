@@ -66,11 +66,17 @@ function Shallow_water_theta_newton(
     L = 10
     dx = 1
     dy = 1
+
+    #Stabilization parameters
+    c₁ = 12
+    c₂ = 2
+    c₃ = 1
+
     domain = (0,B,0,L)
     
     partition = (100,100)
     dir = "swe-solver/output_linear_swe"
-    model = CartesianDiscreteModel(domain,partition;isperiodic=(true,false))
+    model = CartesianDiscreteModel(domain,partition;isperiodic=(false,false))
 
 
     labels = get_face_labeling(model)
@@ -79,7 +85,7 @@ function Shallow_water_theta_newton(
     add_tag_from_tags!(labels,"right",[8])
     add_tag_from_tags!(labels,"top",[3,4,6])
     add_tag_from_tags!(labels,"inside",[9])
-    DC = ["top","bottom"]
+    DC = ["right","left"]
 
     Ω = Triangulation(model)
     dΩ = Measure(Ω,degree)
@@ -92,7 +98,7 @@ function Shallow_water_theta_newton(
     
 
     reffe_rt = ReferenceFE(lagrangian,VectorValue{2,Float64},order)
-    V = TestFESpace(model,reffe_rt;dirichlet_tags=DC)
+    V = TestFESpace(model,reffe_rt)
     U = TransientTrialFESpace(V)
 
     reffe_lgn = ReferenceFE(lagrangian,Float64,order)
@@ -109,29 +115,46 @@ function Shallow_water_theta_newton(
     #Create initial solutions
     a1(u,v) = ∫(v⋅u)dΩ
     l1(v) = ∫(v⋅u₀)dΩ
-    un = solve(AffineFEOperator(a1,l1,U,V))
+    uₙ = solve(AffineFEOperator(a1,l1,U,V))
 
     a2(u,v) = ∫(v*u)dΩ
     l2(v) = ∫(v*h₀)dΩ
-    hn = solve(AffineFEOperator(a2,l2,P,Q))
+    ζₙ = solve(AffineFEOperator(a2,l2,P,Q))
 
     a3(u,v) = ∫(v*u)dΩ
     l3(v) = ∫(v*topography)dΩ
     b = solve(AffineFEOperator(a3,l3,P,Q))
+
+
     unv,hnv = get_free_dof_values(un,hn)
-    F₀ = clone_fe_function(V,un)
-    compute_mass_flux!(F₀,dΩ,V,RTMMchol,un*hn)
+    F₀ = clone_fe_function(V,uₙ)
+    compute_mass_flux!(F₀,dΩ,V,RTMMchol,uₙ*ζₙ)
     
     coriolis((x,y)) = [0 -1;1 0]
     uhn = uh(un,hn,F₀,X,Y,dΩ)
-    un, hn,F = uhn
+    uₙ, ζₙ, F = uhn
     A = [0 -1; 1 0]
     forcfunc(t) = VectorValue(0.5,0)  
 
-    g = 9.81
-    res(t,(u,h,F),(w,ϕ,w2)) = ∫(∂t(u)⋅w -g*(∇⋅(w))*(b+h)  + ∂t(h)*ϕ  + w2⋅(F - u*h) + ϕ*(∇⋅(F))-forcfunc(t)⋅w)dΩ + ∫(g*(h+b)*(w⋅nΓ))dΓ 
-    jac(t,(u,h,F),(du,dh,dF),(w,ϕ,w2)) = ∫(-g*(∇⋅(w))*dh  + w2⋅(dF -du*h -u*dh) + ϕ*(∇⋅(dF)))dΩ + ∫(g*dh*(w⋅nΓ))dΓ
-    jac_t(t,(u,h),(dut,dht),(w,ϕ)) = ∫(dut⋅w + dht*ϕ)dΩ
+
+    perp(u) = VectorValue(-u[2],u[1])
+    norm(u) = sqrt(u⋅u)
+    dnorm(u,du) = u ⋅ du / norm(u)
+    I = [1,1]
+    Rζ(u,ζ,b) = ∂t(ζ) + (ζ + b) * (∇ ⋅ (u)) + ∇(ζ)'⋅u
+    Rᵤ(u,ζ,b) = ∂t(u) + ∇(u)'⋅u + cD * norm∘(u) * u / (ζ+b) + f*perp∘(u) + g * (∇(ζ)) #To be added, forcing function Fₚ
+    dRζ(u,ζ,du,dζ,b) = dζ * (∇⋅(u)) + (ζ+b)*(∇⋅(du)) + du ⋅ (∇(ζ)) + u ⋅ (∇(ζ))
+    dRᵤ(u,ζ,du,dζ,b) = ∇(u)'⋅du + ∇(du)'⋅u + cD * dnorm∘(u,du) * u / (ζ+b) + cD * norm∘(u) * du / (ζ+b) + cD * norm∘(u) * u *dζ /(ζ+b)*(ζ+b) + f*perp∘(du) +  g * ∇(dζ)
+    Lζ(v,w) = (h-H) * (∇⋅v) - (∇(w))⋅uₙ
+    Lₙ(v,w) = -∇(v⋅uₙ) - g * ∇(w) - f * E * I
+    τᵤ(a,ζ) = 1.0 / (c₁*ν/(Δxₒ.^2) + c₂*a/Δxₒ + c₃*cD*g*a/(ζ+1e-14))
+    τₕ(a,ζ) = Δxₒ.^2/(c₁*τᵤ(a,ζ))
+    dτᵤdu(a,ζ,da) = - τᵤ(a,ζ)*τᵤ(a,ζ) * (c₂/Δxₒ + c₃*cD*g/(ζ+1e-14))*da
+    dτᵤdζ(a,ζ,dζ) = τᵤ(a,ζ)*τᵤ(a,ζ) * c₃*cD*g*a/(ζ*ζ+1e-14)*dζ
+    dτζdu(a,ζ,da) = τζ(a,ζ)/τᵤ(a,ζ)*dτᵤdu(a,ζ,da)
+    dτζdζ(a,ζ,dζ) = τζ(a,ζ)/τᵤ(a,ζ)*dτᵤdζ(a,ζ,dζ)
+
+
 
 
     op = TransientFEOperator(res,jac,jac_t,X,Y)
@@ -175,23 +198,6 @@ function u₀((x,y))
     u = VectorValue(0.0,0.0)
     u
 end
-global uₙ = interpolate_everywhere(u₀(0.0),Uᵤ(0.0))
-global ζₙ = interpolate_everywhere(ζ₀(0.0),Uₕ(0.0))
-norm(u) = sqrt(u⋅u)
-dnorm(u,du) = u ⋅ du / norm(u)
-I = [1,1]
-Rζ(u,ζ) = ∂t(ζ) + (ζ + H - h) * (∇ ⋅ u) + u ⋅ (∇(ζ))
-Rᵤ(u,ζ) = ∂t(u) + (u ⋅ ∇)u + cD * norm(u) * u / (ζ+H-h) + f * E * u + g * (∇(ζ)) - Fₚ
-dRζ(u,ζ,du,dζ) = dζ * (∇⋅u) + (ζ+H-h)*(∇⋅du) + du ⋅ (∇(ζ)) + u ⋅ (∇(ζ))
-dRᵤ(u,ζ,du,dζ) = (du ⋅ ∇) * u + (u⋅∇)*du + cD * dnorm(u,du) * u / (ζ+H-h) + cD * norm(u) * du / (ζ+H-h) + cD * norm(u) * u *dζ /(ζ+H-h)^2 + f*E*du + g *  ∇(dζ)
-Lζ(v,w) = (h-H) * (∇⋅v) - uₙ ⋅ (∇(w)) 
-Lₙ(v,w) = -∇(v⋅uₙ) - g * ∇(w) - f * E * I
-τᵤ(a,ζ) = 1.0 / (c₁*ν/(Δxₒ.^2) + c₂*a/Δxₒ + c₃*cD*g*a/(ζ+1e-14))
-τₕ(a,ζ) = Δxₒ.^2/(c₁*τᵤ(a,ζ))
-dτᵤdu(a,ζ,da) = - τᵤ(a,ζ)*τᵤ(a,ζ) * (c₂/Δxₒ + c₃*cD*g/(ζ+1e-14))*da
-dτᵤdζ(a,ζ,dζ) = τᵤ(a,ζ)*τᵤ(a,ζ) * c₃*cD*g*a/(ζ*ζ+1e-14)*dζ
-dτζdu(a,ζ,da) = τζ(a,ζ)/τᵤ(a,ζ)*dτᵤdu(a,ζ,da)
-dτζdζ(a,ζ,dζ) = τζ(a,ζ)/τᵤ(a,ζ)*dτᵤdζ(a,ζ,dζ)
 
 
 
