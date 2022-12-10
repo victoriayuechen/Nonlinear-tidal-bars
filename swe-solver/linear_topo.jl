@@ -56,25 +56,33 @@ function Shallow_water_theta_newton(
         order,degree,h₀,u₀,topography,
         linear_solver::Gridap.Algebra.LinearSolver=Gridap.Algebra.BackslashSolver(),
         sparse_matrix_type::Type{<:AbstractSparseMatrix}=SparseMatrixCSC{Float64,Int})
+
+
+    dir = "swe-solver/output_linear_swe"
     #Create model
     B = 10
     L = 10
     dx = 1
     dy = 1
+    latitude = 52
+    η = 7.29e-5
+    f = 2*η*sin(latitude*(π/180))
+    g = 9.81
+
+    #Domain properties
     domain = (0,B,0,L)
-    
-    partition = (100,100)
-    dir = "swe-solver/output_linear_swe"
-    model = CartesianDiscreteModel(domain,partition;isperiodic=(false,false))
+    partition = (50,50)
 
+    model = CartesianDiscreteModel(domain,partition;isperiodic=(false,true))
 
+    #Make labels
     labels = get_face_labeling(model)
     add_tag_from_tags!(labels,"bottom",[1,2,5])
     add_tag_from_tags!(labels,"left",[7])
     add_tag_from_tags!(labels,"right",[8])
     add_tag_from_tags!(labels,"top",[3,4,6])
     add_tag_from_tags!(labels,"inside",[9])
-    DC = ["top","bottom","right","left"]
+    DC = ["right","left"]
 
     Ω = Triangulation(model)
     dΩ = Measure(Ω,degree)
@@ -117,22 +125,24 @@ function Shallow_water_theta_newton(
     F₀ = clone_fe_function(V,un)
     compute_mass_flux!(F₀,dΩ,V,RTMMchol,un*hn)
     
-    coriolis((x,y)) = [0 -1;1 0]
+    
     uhn = uh(un,hn,F₀,X,Y,dΩ)
     un, hn,F = uhn
-    A = [0 -1; 1 0]
-    forcfunc(t) = VectorValue(0.0,0.0)  
 
-    g = 9.81
-    res(t,(u,h,F),(w,ϕ,w2)) = ∫(∂t(u)⋅w -g*(∇⋅(w))*(b+h)  + ∂t(h)*ϕ  + w2⋅(F - u*h) - F⋅(∇(ϕ))-forcfunc(t)⋅w)dΩ + ∫(g*(h+b)*(w⋅nΓ))dΓ 
-    jac(t,(u,h,F),(du,dh,dF),(w,ϕ,w2)) = ∫(-g*(∇⋅(w))*dh  + w2⋅(dF -du*h -u*dh) - dF⋅(∇(ϕ)))dΩ + ∫(g*dh*(w⋅nΓ))dΓ
+    #Forcing functions and coriolis function
+    coriolis(u) = f*VectorValue(-u[2],u[1])
+    forcfunc(t) = VectorValue(0.0,0.5*cos((1/5)*π*t))  
+
+
+    res(t,(u,h,F),(w,ϕ,w2)) = ∫(∂t(u)⋅w -g*(∇⋅(w))*(b+h)  + ∂t(h)*ϕ  + w2⋅(F - u*h) - F⋅(∇(ϕ))-forcfunc(t)⋅w + (coriolis∘u)⋅w)dΩ + ∫(g*(h+b)*(w⋅nΓ))dΓ 
+    jac(t,(u,h,F),(du,dh,dF),(w,ϕ,w2)) = ∫(-g*(∇⋅(w))*dh  + w2⋅(dF -du*h -u*dh) - dF⋅(∇(ϕ)) + (coriolis∘du)⋅w)dΩ + ∫(g*dh*(w⋅nΓ))dΓ
     jac_t(t,(u,h),(dut,dht),(w,ϕ)) = ∫(dut⋅w + dht*ϕ)dΩ
 
 
     op = TransientFEOperator(res,jac,jac_t,X,Y)
     nls = NLSolver(show_trace=true,linesearch=BackTracking())
-    Tend = 5
-    ode_solver = ThetaMethod(nls,0.1,0.5)
+    Tend = 10
+    ode_solver = ThetaMethod(nls,0.05,0.5)
     x = solve(ode_solver,op,uhn,0.0,Tend)
     dir = "swe-solver/1d-topo-output_zero"
     if isdir(dir)
@@ -158,12 +168,12 @@ function Shallow_water_theta_newton(
 end
 
 function h₀((x,y))
-    h = -topography((x,y)) +  1  + 2*exp(-10*(x-5)^2 -10*(y-5)^2)
+    h = -topography((x,y)) +  1  #+ 0.1*exp(-100*(x-0.5)^2 -100*(y-0.25)^2)
     h
 end
 
 function topography((x,y))
-    p = 0.0
+    p = 0.5*exp(-10*(x-5-cos((y)*π*(1/10)))^2)
     p
 end
 
