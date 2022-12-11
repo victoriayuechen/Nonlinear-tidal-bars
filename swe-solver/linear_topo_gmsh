@@ -58,16 +58,8 @@ function Shallow_water_theta_newton(
         linear_solver::Gridap.Algebra.LinearSolver=Gridap.Algebra.BackslashSolver(),
         sparse_matrix_type::Type{<:AbstractSparseMatrix}=SparseMatrixCSC{Float64,Int})
     #Create model
-    B = 10
-    L = 10
-    dx = 1
-    dy = 1
-    domain = (0,B,0,L)
-    
-    partition = (50,50)
     dir = "swe-solver/output_linear_swe"
     model = GmshDiscreteModel("swe-solver/meshes/periodic_mesh2.msh")
-
 
     DC = ["left","right"]
 
