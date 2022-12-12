@@ -69,8 +69,11 @@ function Shallow_water_theta_newton(
     dy = 1
     g = 9.80655
     H = 0.5
-    h = 0
-    v = 10^(-6)
+    h = 0.1         # To be changed 
+    ν = 10^(-6)
+    Δxₒ = 1         # To be changed
+    cD = 0.0025     # To be further determined
+    ϕ = H - h 
 
     #Stabilization parameters
     c₁ = 12
@@ -142,10 +145,10 @@ function Shallow_water_theta_newton(
 
 
     perp(u) = VectorValue(-u[2],u[1])
-    norm(u) = sqrt(u⋅u)
+    norm(u) = sqrt(u⋅u) + 1e-14
     dnorm(u,du) = u ⋅ du / norm(u)
     I = [1,1]
-    Rζ(u,ζ,b) = ∂t(ζ) + (ζ + b) * (∇ ⋅ (u)) + ∇(ζ)'⋅u
+    Rζ(u,ζ,b) = (∂t(ζ) + (ζ + b) * (∇⋅(u)) + ∇(ζ)'⋅u)
     Rᵤ(u,ζ,b) = ∂t(u) + ∇(u)'⋅u + cD * norm∘(u) * u / (ζ+b) + g * (∇(ζ)) #To be added, forcing function Fₚ ; + f*perp∘(u) : coriolis neglected
     dRζ(u,ζ,du,dζ,b) = dζ * (∇⋅(u)) + (ζ+b)*(∇⋅(du)) + du ⋅ (∇(ζ)) + u ⋅ (∇(ζ))
     dRᵤ(u,ζ,du,dζ,b) = ∇(u)'⋅du + ∇(du)'⋅u + cD * dnorm∘(u,du) * u / (ζ+b) + cD * norm∘(u) * du / (ζ+b) + cD * norm∘(u) * u * dζ /(ζ+b)*(ζ+b) +  g * ∇(dζ) # + f*perp∘(du) : coriolis neglected
@@ -158,13 +161,13 @@ function Shallow_water_theta_newton(
     dτζdu(a,ζ,da) = τζ(a,ζ)/τᵤ(a,ζ)*dτᵤdu(a,ζ,da)
     dτζdζ(a,ζ,dζ) = τζ(a,ζ)/τᵤ(a,ζ)*dτᵤdζ(a,ζ,dζ)
 
-    res(t, (u, ζ), (v, w)) = ∫(∂t(ζ)*w - (ζ + H - h)*u⋅(∇(w)) + (∂t(u) + (u⋅∇)*u + cD * norm∘(u)*u/(ζ + H - h))⋅v -g*ζ*(∇⋅v)    # Remember to add forcing function Fₚ
-     - Rζ∘(u, ζ, (H-h))*(τζ∘(norm∘(u), ζ)*Lζ∘(v, w))
-     - Rᵤ∘(u, ζ, (H-h))⋅(τᵤ∘(norm∘(u), ζ)*Lᵤ∘(v, w)))dΩ + ∫(g*ζ*v⋅nΓ)dΓ
+    res(t, (u, ζ), (v, w)) = ∫( -((ζ + H - h)*u)⋅∇(w) - g*ζ*(∇⋅v) + ∂t(ζ)*w + ∂t(u)⋅v + ((u⋅∇)*u)⋅v + (cD * norm∘(u)/(ζ + H - h) * u)⋅v
+        -Rζ∘(u, ζ, ϕ)*(τζ∘(norm∘(u), ζ)*Lζ∘(v, w))
+        -Rᵤ∘(u, ζ, ϕ)⋅(τᵤ∘(norm∘(u), ζ)*Lᵤ∘(v, w)))dΩ + ∫(g*ζ*v⋅nΓ)dΓ # Remember to add forcing function Fₚ
 
-    jac(t, (u, ζ), (du, dζ), (v, w)) = ∫(((ζ + H - h)*du + dζ)⋅∇(w) + ((du⋅∇)*u + (u⋅∇)*du + cD * dnorm∘(u, du) * u / (ζ+H-h) + cD*norm∘(u)/(ζ+H-h) * du + cD*norm∘(u)*u*dζ / (ζ+H-h)^2)⋅v - g*dζ*(∇⋅v)
-     - dRζ∘(u,ζ,du,dζ,(H-h)) * τζ∘(norm∘(u), ζ)*Lζ∘(v, w) + Rζ∘(u, ζ, (H-h))*((dτζdu∘(norm∘(u), ζ, dnorm∘(u, du)) + dτζdζ∘(norm∘(u), ζ, dζ)) * Lζ∘(v, w))
-     - dRᵤ∘(u,ζ,du,dζ,(H-h))⋅(τᵤ∘(norm∘(u), ζ)*Lᵤ∘(v, w)) + Rᵤ∘(u, ζ, (H-h))⋅((dτζdu∘(norm∘(u), ζ, dnorm∘(u, du)) + dτζdζ∘(norm∘(u), ζ, dζ)) * Lᵤ∘(v, w)))dΩ + ∫(g*dζ*v⋅nΓ)dΓ
+    jac(t, (u, ζ), (du, dζ), (v, w)) = ∫(((ζ + H - h)*du + u*dζ)⋅∇(w) + ((du⋅∇)*u + (u⋅∇)*du + cD * dnorm∘(u, du) * u / (ζ+H-h) + cD*norm∘(u)/(ζ+H-h) * du + cD*norm∘(u)*u*dζ / (ζ+H-h)^2)⋅v - g*dζ*(∇⋅v) 
+        -dRζ∘(u,ζ,du,dζ,ϕ) * τζ∘(norm∘(u), ζ)*Lζ∘(v, w) + Rζ∘(u, ζ, ϕ)*((dτζdu∘(norm∘(u), ζ, dnorm∘(u, du)) + dτζdζ∘(norm∘(u), ζ, dζ)) * Lζ∘(v, w))
+        -dRᵤ∘(u,ζ,du,dζ,ϕ)⋅(τᵤ∘(norm∘(u), ζ)*Lᵤ∘(v, w)) + Rᵤ∘(u, ζ, ϕ)⋅((dτζdu∘(norm∘(u), ζ, dnorm∘(u, du)) + dτζdζ∘(norm∘(u), ζ, dζ)) * Lᵤ∘(v, w)))dΩ + ∫(g*dζ*v⋅nΓ)dΓ
     
     jac_t(t, (u, ζ), (dut, dζt), (v, w)) = ∫(dζt*w +dut⋅v - dζt*τζ∘(norm∘(u), ζ)* Lζ∘(v, w) - dut⋅(τᵤ∘(norm∘(u), ζ)*L∘(v, w)))dΩ
 
