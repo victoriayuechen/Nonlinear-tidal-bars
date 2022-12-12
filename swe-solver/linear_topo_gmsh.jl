@@ -1,6 +1,7 @@
 using Pkg
 Pkg.activate(".")
 
+using Revise
 using Gridap
 using SparseMatricesCSR
 using SparseArrays
@@ -9,11 +10,15 @@ using LinearAlgebra
 using LineSearches: BackTracking
 using GridapGmsh
 
+# Include local module
+include("mesh_generator.jl")
+using .MyMeshGenerator
+
 #Solves linear shallow water equations on a 2d plane
 
-function uh(u₀,h₀,F₀,q₀,X,Y,dΩ)
-    a((u,u2,h,r),(w,w2,ϕ,ϕ2)) = ∫(w⋅u + ϕ*h + w2⋅u2 + ϕ2*r)dΩ
-    b((w,w2,ϕ,ϕ2)) = ∫(w⋅u₀ + ϕ*h₀ + w2⋅F₀ + q₀*ϕ2)dΩ
+function uh(u₀,h₀,F₀,X,Y,dΩ)
+    a((u,h,u2),(w,ϕ,w2)) = ∫(w⋅u + ϕ*h + w2⋅u2)dΩ
+    b((w,ϕ,w2)) = ∫(w⋅u₀ + ϕ*h₀ + w2⋅F₀)dΩ
     solve(AffineFEOperator(a,b,X,Y))
 end
 
@@ -23,27 +28,17 @@ function compute_mass_flux!(F,dΩ,V,RTMMchol,u)
     ldiv!(RTMMchol,get_free_dof_values(F))
 end
 
-function compute_potential_vorticity!(q,H1h,H1hchol,dΩ,R,S,h,u,f)
-    a(r,s) = ∫(s*h*r)dΩ
-    c(s)   = ∫(perp∘(∇(s))⋅(u) + s*f)dΩ
-    Gridap.FESpaces.assemble_matrix_and_vector!(a, c, H1h, get_free_dof_values(q), R, S)
-    lu!(H1hchol, H1h)
-    ldiv!(H1hchol, get_free_dof_values(q))
-  end
-
 clone_fe_function(space,f)=FEFunction(space,copy(get_free_dof_values(f)))
 
-function setup_and_factorize_mass_matrices(dΩ, R, S, U, V, P, Q)
+function setup_and_factorize_mass_matrices(dΩ,V,Q,U,P)
     amm(a,b) = ∫(a⋅b)dΩ
-    H1MM = assemble_matrix(amm, R, S)
-    RTMM = assemble_matrix(amm, U, V)
-    L2MM = assemble_matrix(amm, P, Q)
-    H1MMchol = lu(H1MM)
+
+    RTMM = assemble_matrix(amm,U,V)
+
     RTMMchol = lu(RTMM)
-    L2MMchol = lu(L2MM)
-  
-    H1MM, RTMM, L2MM, H1MMchol, RTMMchol, L2MMchol
-  end
+
+    RTMM,RTMMchol
+end
 
 function new_vtk_step(Ω,file,_cellfields)
     n = size(_cellfields)[1]
@@ -53,7 +48,10 @@ function new_vtk_step(Ω,file,_cellfields)
               nsubcells=n)
 end
 
-coriolis(u) = 0.5*perp(u)
+function perp(u,n)
+    n×u
+ end
+ const ⟂ = perp
 
 function Gridap.get_free_dof_values(functions...)
     map(get_free_dof_values,functions)
@@ -64,30 +62,13 @@ function Shallow_water_theta_newton(
         order,degree,h₀,u₀,topography,
         linear_solver::Gridap.Algebra.LinearSolver=Gridap.Algebra.BackslashSolver(),
         sparse_matrix_type::Type{<:AbstractSparseMatrix}=SparseMatrixCSC{Float64,Int})
+
+    # Generate the model
+    modelfile = "swe-solver/meshes/periodic_mesh_test.msh"
+    generate_rectangle_mesh(10.0, 10.0, modelfile, "rectangle", 0.1)
     #Create model
-    B = 10
-    L = 10
-    dx = 1
-    dy = 1
-    latitude = 52
-    η = 7.29e-5
-    f = 2*η*sin(latitude*(π/180))
-    g = 9.81
-
-    #Domain properties
-    domain = (0,B,0,L)
-    partition = (25,25)
-
-    model = CartesianDiscreteModel(domain,partition;isperiodic=(false,true))
-
-    #Make labels
-    labels = get_face_labeling(model)
-    add_tag_from_tags!(labels,"bottom",[1,2,5])
-    add_tag_from_tags!(labels,"left",[7])
-    add_tag_from_tags!(labels,"right",[8])
-    add_tag_from_tags!(labels,"top",[3,4,6])
-    add_tag_from_tags!(labels,"inside",[9])
-    DC = ["right","left"]
+    dir = "swe-solver/output_linear_swe"
+    model = GmshDiscreteModel(modelfile)
 
     DC = ["left","right"]
 
@@ -97,7 +78,6 @@ function Shallow_water_theta_newton(
     Γ = BoundaryTriangulation(model,tags=DC)
     nΓ = get_normal_vector(Γ)
     dΓ = Measure(Γ,degree)
-    τ=0.5
     
 
     reffe_rt = ReferenceFE(lagrangian,VectorValue{2,Float64},order)
@@ -109,10 +89,10 @@ function Shallow_water_theta_newton(
     P = TransientTrialFESpace(Q)
 
 
-    H1MM, RTMM, L2MM, H1MMchol, RTMMchol, L2MMchol = setup_and_factorize_mass_matrices(dΩ,P,Q,U,V,P,Q)
+    RTMM,RTMMchol = setup_and_factorize_mass_matrices(dΩ,V,Q,U,P)
 
-    Y = MultiFieldFESpace([V,V,Q,Q])#∇u, ∇h
-    X = TransientMultiFieldFESpace([U,U,P,P])
+    Y = MultiFieldFESpace([V,Q,V])#∇u, ∇h
+    X = TransientMultiFieldFESpace([U,P,U])
 
     E = [0 -1; 1 0]
     #Create initial solutions
@@ -127,26 +107,20 @@ function Shallow_water_theta_newton(
     a3(u,v) = ∫(v*u)dΩ
     l3(v) = ∫(v*topography)dΩ
     b = solve(AffineFEOperator(a3,l3,P,Q))
-
-    q₀ = clone_fe_function(P,b)
-    compute_potential_vorticity!(q₀,H1MM,H1MMchol,dΩ,P,Q,hn,un,f)
-
-
     unv,hnv = get_free_dof_values(un,hn)
     F₀ = clone_fe_function(V,un)
     compute_mass_flux!(F₀,dΩ,V,RTMMchol,un*hn)
     
     
-    uhn = uh(un,hn,F₀,q₀,X,Y,dΩ)
-    un,F,hn,q = uhn
-
-    perp(u) = VectorValue(-u[2],u[1])
-
+    uhn = uh(un,hn,F₀,X,Y,dΩ)
+    un, hn,F = uhn
+    A = [0 -1;1 0]
+    coriolis(u) = 0.5*VectorValue(-u[2],u[1])
     forcfunc(t) = VectorValue(0.5*cos((1/10)*π*t),0.0)  
 
     g = 9.81
-    res(t,(u,F,h,q),(w,w2,ϕ,ϕ2)) = ∫(∂t(u)⋅w + (q-τ*(u⋅∇(q)))*(w⋅perp∘(F)) - (∇⋅(w))*(g*(h+b) + 0.5*(u⋅u)) + ∂t(h)*ϕ + ∇⋅(F)*ϕ + w2⋅(F-u*h) + (perp∘(∇(ϕ2))⋅u - ϕ2*f))dΩ #ϕ2*q*h + 
-    jac(t,(u,F,h,q),(du,dF,dh,dq),(w,w2,ϕ,ϕ2)) = ∫(w⋅(dq - τ*(u⋅∇(dq)) + du⋅∇(q))*(perp∘(F)) + (q-τ*(u⋅∇(q)))*(w⋅perp∘(dF)) - (∇⋅(w))*(g*(dh) + 2*(du⋅u)) + ∇⋅(dF)*ϕ + w2⋅(dF-du*h - dh*u) + (du⋅perp∘(∇(ϕ2))))dΩ #ϕ2*q*dh + ϕ2*dq*h + 
+    res(t,(u,h,F),(w,ϕ,w2)) = ∫(∂t(u)⋅w -g*(∇⋅(w))*(b+h)  + ∂t(h)*ϕ  + w2⋅(F - u*h) - F⋅(∇(ϕ))-forcfunc(t)⋅w + (coriolis∘u)⋅w)dΩ + ∫(g*(h+b)*(w⋅nΓ))dΓ 
+    jac(t,(u,h,F),(du,dh,dF),(w,ϕ,w2)) = ∫(-g*(∇⋅(w))*dh  + w2⋅(dF -du*h -u*dh) - dF⋅(∇(ϕ)) + (coriolis∘du)⋅w)dΩ + ∫(g*dh*(w⋅nΓ))dΓ
     jac_t(t,(u,h),(dut,dht),(w,ϕ)) = ∫(dut⋅w + dht*ϕ)dΩ
 
 

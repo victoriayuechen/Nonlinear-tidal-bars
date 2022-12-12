@@ -7,7 +7,6 @@ using SparseArrays
 using WriteVTK
 using LinearAlgebra
 using LineSearches: BackTracking
-using GridapGmsh
 
 #Solves linear shallow water equations on a 2d plane
 
@@ -43,8 +42,9 @@ function new_vtk_step(Ω,file,_cellfields)
               nsubcells=n)
 end
 
-function perp(u,n)
-    n×u
+function perp(u)
+    p = VectorValue(-u[2],u[1])
+    p
  end
  const ⟂ = perp
 
@@ -57,19 +57,33 @@ function Shallow_water_theta_newton(
         order,degree,h₀,u₀,topography,
         linear_solver::Gridap.Algebra.LinearSolver=Gridap.Algebra.BackslashSolver(),
         sparse_matrix_type::Type{<:AbstractSparseMatrix}=SparseMatrixCSC{Float64,Int})
+
+
+    dir = "swe-solver/output_linear_swe"
     #Create model
     B = 10
     L = 10
     dx = 1
     dy = 1
+    latitude = 52
+    η = 7.29e-5
+    f = 2*η*sin(latitude*(π/180))
+    g = 9.81
+
+    #Domain properties
     domain = (0,B,0,L)
-    
     partition = (50,50)
-    dir = "swe-solver/output_linear_swe"
-    model = GmshDiscreteModel("swe-solver/meshes/periodic_mesh2.msh")
 
+    model = CartesianDiscreteModel(domain,partition;isperiodic=(false,true))
 
-    DC = ["left","right"]
+    #Make labels
+    labels = get_face_labeling(model)
+    add_tag_from_tags!(labels,"bottom",[1,2,5])
+    add_tag_from_tags!(labels,"left",[7])
+    add_tag_from_tags!(labels,"right",[8])
+    add_tag_from_tags!(labels,"top",[3,4,6])
+    add_tag_from_tags!(labels,"inside",[9])
+    DC = ["right","left"]
 
     Ω = Triangulation(model)
     dΩ = Measure(Ω,degree)
@@ -82,7 +96,9 @@ function Shallow_water_theta_newton(
     
 
     reffe_rt = ReferenceFE(lagrangian,VectorValue{2,Float64},order)
-    V = TestFESpace(model,reffe_rt)
+    V = TestFESpace(model,reffe_rt,dirichlet_tags=DC,dirichlet_masks=[(true,false),(true,false)])
+    udc(x,t::Real) = VectorValue(0.0,0.0)
+    udc(t::Real) = x -> udc(x,t)
     U = TransientTrialFESpace(V)
 
     reffe_lgn = ReferenceFE(lagrangian,Float64,order)
@@ -115,20 +131,21 @@ function Shallow_water_theta_newton(
     
     uhn = uh(un,hn,F₀,X,Y,dΩ)
     un, hn,F = uhn
-    A = [0 -1;1 0]
-    coriolis(u) = 0.5*VectorValue(-u[2],u[1])
-    forcfunc(t) = VectorValue(0.5*cos((1/10)*π*t),0.0)  
 
-    g = 9.81
-    res(t,(u,h,F),(w,ϕ,w2)) = ∫(∂t(u)⋅w -g*(∇⋅(w))*(b+h)  + ∂t(h)*ϕ  + w2⋅(F - u*h) - F⋅(∇(ϕ))-forcfunc(t)⋅w + (coriolis∘u)⋅w)dΩ + ∫(g*(h+b)*(w⋅nΓ))dΓ 
-    jac(t,(u,h,F),(du,dh,dF),(w,ϕ,w2)) = ∫(-g*(∇⋅(w))*dh  + w2⋅(dF -du*h -u*dh) - dF⋅(∇(ϕ)) + (coriolis∘du)⋅w)dΩ + ∫(g*dh*(w⋅nΓ))dΓ
+    #Forcing functions and coriolis function
+    coriolis(u) = f*perp(u)
+    forcfunc(t) = VectorValue(0.0,0.5*cos((1/5)*π*t))  
+
+
+    res(t,(u,h,F),(w,ϕ,w2)) = ∫(∂t(u)⋅w -g*(∇⋅(w))*(b+h)  + ∂t(h)*ϕ +ϕ*(∇⋅(F)) + w2⋅(F - u*h)-forcfunc(t)⋅w + (coriolis∘u)⋅w)dΩ
+    jac(t,(u,h,F),(du,dh,dF),(w,ϕ,w2)) = ∫(-g*(∇⋅(w))*dh  + w2⋅(dF -du*h -u*dh) + ϕ*(∇⋅(dF))   + (coriolis∘du)⋅w)dΩ
     jac_t(t,(u,h),(dut,dht),(w,ϕ)) = ∫(dut⋅w + dht*ϕ)dΩ
 
 
     op = TransientFEOperator(res,jac,jac_t,X,Y)
     nls = NLSolver(show_trace=true,linesearch=BackTracking())
     Tend = 10
-    ode_solver = ThetaMethod(nls,0.05,0.5)
+    ode_solver = ThetaMethod(nls,0.1,0.5)
     x = solve(ode_solver,op,uhn,0.0,Tend)
     dir = "swe-solver/1d-topo-output_zero"
     if isdir(dir)
@@ -154,7 +171,7 @@ function Shallow_water_theta_newton(
 end
 
 function h₀((x,y))
-    h = -topography((x,y)) +  1  #+ 0.1*exp(-100*(x-0.5)^2 -100*(y-0.25)^2)
+    h = -topography((x,y)) +  1 + 1*exp(-1*(x-5)^2 -1*(y-1)^2)
     h
 end
 
