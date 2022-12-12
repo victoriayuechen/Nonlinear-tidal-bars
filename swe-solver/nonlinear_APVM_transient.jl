@@ -95,23 +95,23 @@ function Shallow_water_theta_newton(
     Ω = Triangulation(model)
     dΩ = Measure(Ω,degree)
     dω = Measure(Ω,degree,ReferenceDomain())
-    Γ = BoundaryTriangulation(model,tags=DC)
+    Γ = BoundaryTriangulation(model,tags="boundary")
     nΓ = get_normal_vector(Γ)
     dΓ = Measure(Γ,degree)
-    
+    τ=0.5
     
 
     reffe_rt = ReferenceFE(raviart_thomas,Float64,order)
     V = TestFESpace(model,reffe_rt,dirichlet_tags="boundary")
-    U = TrialFESpace(V)
+    U = TransientTrialFESpace(V)
 
     reffe_lgn = ReferenceFE(lagrangian,Float64,order)
     Q = TestFESpace(model,reffe_lgn)
-    P = TrialFESpace(Q)
+    P = TransientTrialFESpace(Q)
 
-    reffe_lgn = ReferenceFE(lagrangian, Float64, order+1)
+    reffe_lgn = ReferenceFE(lagrangian, Float64, order)
     S = FESpace(model, reffe_lgn)
-    R = TrialFESpace(S)
+    R = TransientTrialFESpace(S)
 
 
     H1MM, RTMM, L2MM, H1MMchol, RTMMchol, L2MMchol = setup_and_factorize_mass_matrices(dΩ,R,S,U,V,P,Q)
@@ -129,13 +129,13 @@ function Shallow_water_theta_newton(
     l2(v) = ∫(v*h₀)dΩ
     hn = solve(AffineFEOperator(a2,l2,P,Q))
 
-
-    b = interpolate(topography,P)
+    a3(u,v) = ∫(v*u)dΩ
+    l3(v) = ∫(v*topography)dΩ
+    b = solve(AffineFEOperator(a3,l3,P,Q))
 
     a4(u,v)=∫(v*u)dΩ
     l4(v)=∫(v*f)dΩ
     fn=solve(AffineFEOperator(a4,l4,R,S))
-
 
 
     q₀ = clone_fe_function(P,fn)
@@ -154,49 +154,43 @@ function Shallow_water_theta_newton(
 
     forcfunc(t) = VectorValue(0.5*cos((1/10)*π*t),0.0)  
 
-    N = 100
-    θ = 0.5
-    dt = 0.1
-    τ=0.5*dt
     g = 9.81
-    nlrtol = 1.0e-8
+    res(t,(u,h,q,F),(w,ϕ,ϕ2,w2)) = ∫(∂t(u)⋅w + ((q-τ*(u⋅∇(q)))*(perp∘(F)))⋅w - (∇⋅(w))*(g*(h+b) + 0.5*(u⋅u)) + ∂t(h)*ϕ + w2⋅(F-u*h) + ϕ2*(q*h) +  (perp∘(∇(ϕ2)))⋅u - (ϕ2*fn) + ϕ*(∇⋅(F)))dΩ + ∫(g*(h+b)*(w⋅nΓ))dΓ
+    jac(t,(u,h,q,F),(du,dh,dq,dF),(w,ϕ,ϕ2,w2)) = ∫(((dq - τ*(u⋅∇(dq) + du⋅∇(q)))*(perp∘(F)))⋅w + ((q-τ*(u⋅∇(q)))*(perp∘(dF)))⋅w - (∇⋅(w))*(g*(dh) + (du⋅u)) + w2⋅(dF - du*h - dh*u) + ϕ2*(q*dh) + ϕ2*(dq*h) + du⋅(perp∘(∇(ϕ2))) + ϕ*(∇⋅(dF)))dΩ+ ∫(g*(dh)*(w⋅nΓ))dΓ
+    jac_t(t,(u,h),(dut,dht),(w,ϕ)) = ∫(dut⋅w + dht*ϕ)dΩ
+
+
+    assem = SparseMatrixAssembler(sparse_matrix_type,Vector{Float64},X,Y)
+    op = TransientFEOperator(res,jac,jac_t,X,Y)
+    nls = NLSolver(show_trace=true,linesearch=BackTracking())
+    Tend = 1
+    ode_solver = ThetaMethod(nls,0.1,0.5)
+    x = solve(ode_solver,op,uhn,0.0,Tend)
     dir = "swe-solver/1d-topo-output_zero"
-
-    for step=1:N
-        function res((Δu,Δh,qvort,F),(v,q,s,v2))
-            one_m_θ = (1-θ)
-            uiΔu    = un     + one_m_θ*Δu
-            hiΔh    = hn     + one_m_θ*Δh
-            hbiΔh   = hn + b + one_m_θ*Δh 
-            ∫((1.0/dt)*v⋅(Δu)-(∇⋅(v))*(g*hbiΔh + 0.5*uiΔu⋅uiΔu) + ((qvort-τ*(uiΔu⋅∇(qvort)))*(perp∘(F)))⋅v + (1.0/dt)*q*(Δh))dΩ + ∫(q*(DIV(F)))dω + ∫(s*qvort*hiΔh +  perp∘(∇(s))⋅uiΔu - s*fn + v2⋅(F-hiΔh*uiΔu))dΩ   
-
+    if isdir(dir)
+        output_file = paraview_collection(joinpath(dir,"1d-topo-output"))do pvd
+            #pvd[0.0] = createvtk(Ω,joinpath(dir,"1d-topo0.0.vtu"),cellfields=["u"=>un,"h"=>(hn+b),"b"=>b])
+            for (x,t) in x
+                u,h,F = x
+                pvd[t] = createvtk(Ω,joinpath(dir,"1d-topo$t.vtu"),cellfields=["u"=>u,"h"=>(h+b),"b"=>b])
+                println("done $t/$Tend")
+            end
         end
-        
-        function jac((Δu,Δh,qvort,F),(du,dh,dq,dF),(v,q,s,v2))
-            one_m_θ = (1-θ)
-            uiΔu  = un + one_m_θ*Δu
-            hiΔh  = hn + one_m_θ*Δh
-            uidu  = one_m_θ*du
-            hidh  = one_m_θ*dh
-            ∫((1.0/dt)*v⋅du +  (dq  - τ*(uiΔu⋅∇(dq)+uidu⋅∇(qvort)))*(perp∘(F))⋅v +  (qvort - τ*(uiΔu⋅∇(qvort)))*(perp∘(dF))⋅v -  (∇⋅(v))*(g*hidh +uiΔu⋅uidu) + (1.0/dt)*q*dh)dΩ + ∫(q*(DIV(dF)))dω  + ∫(s*(qvort*hidh+dq*hiΔh) + perp∘(∇(s))⋅uidu + v2⋅(dF-hiΔh*uidu-hidh*uiΔu))dΩ 
+    else
+        mkdir(dir)
+        output_file = paraview_collection(joinpath(dir,"1d-topo-output")) do pvd
+            #pvd[0.0] = createvtk(Ω,joinpath(dir,"1d-topo0.0.vtu"),cellfields=["u"=>un,"h"=>(hn+b),"b"=>b])
+            for (x,t) in x
+                u,h,F = x
+                pvd[t] = createvtk(Ω,joinpath(dir,"1d-topo$t.vtu"),cellfields=["u"=>u,"h"=>(h+b),"b"=>b])
+                println("done $t/$Tend")
+            end
         end
-        dY = get_fe_basis(Y)
-        residualuhn=res(uhn,dY)
-        r=assemble_vector(residualuhn,Y)
-        assem = SparseMatrixAssembler(sparse_matrix_type,Vector{Float64},X,Y)
-        op = FEOperator(res,jac,X,Y,assem)
-        nls=NLSolver(show_trace=true)
-        solver=FESolver(nls)
-        solve!(uhn,solver,op)
-        
-        unv .=unv+get_free_dof_values(un)
-        hnv .= hnv+get_free_dof_values(hn)
-        pvd[dt*Float64(step)] = createvtk(Ω,joinpath(dir,"nswe_cells_linear_shallow_water_$(dt*step)"*".vtu"),cellfields=["u"=>un,"h"=>hn])
     end
 end
 
 function h₀((x,y))
-    h = -topography((x,y)) +  1  + 0.1*exp(-100*(x-5)^2 -100*(y-5)^2)
+    h = -topography((x,y)) +  1  + 0.2*exp(-10*(x-5)^2 -10*(y-5)^2)
     h
 end
 
