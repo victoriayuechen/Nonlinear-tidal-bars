@@ -62,7 +62,7 @@ function Gridap.get_free_dof_values(functions...)
 
 
 function Shallow_water_theta_newton(
-        order,degree,h₀,u₀,topography,f,
+        order,degree,h₀,u₀,topography,
         linear_solver::Gridap.Algebra.LinearSolver=Gridap.Algebra.BackslashSolver(),
         sparse_matrix_type::Type{<:AbstractSparseMatrix}=SparseMatrixCSC{Float64,Int})
     #Create model
@@ -72,14 +72,17 @@ function Shallow_water_theta_newton(
     dy = 1
     latitude = 52
     η = 7.29e-5
-    #f = 0.05#2*η*sin(latitude*(π/180))
+    f = 0.05#2*η*sin(latitude*(π/180))
     g = 9.81
 
-    #Domain properties
+    
+
+    dir = "swe-solver/output_linear_swe"
+    #Domain 
     domain = (0,B,0,L)
     partition = (50,50)
 
-    model = CartesianDiscreteModel(domain,partition;isperiodic=(false,false))
+    model = CartesianDiscreteModel(domain,partition)
 
     #Make labels
     labels = get_face_labeling(model)
@@ -102,15 +105,15 @@ function Shallow_water_theta_newton(
     
 
     reffe_rt = ReferenceFE(raviart_thomas,Float64,order)
-    V = TestFESpace(model,reffe_rt,dirichlet_tags="boundary")
+    V = TestFESpace(model,reffe_rt;conformity=:HDiv,dirichlet_tags="boundary")
     U = TransientTrialFESpace(V)
 
     reffe_lgn = ReferenceFE(lagrangian,Float64,order)
-    Q = TestFESpace(model,reffe_lgn)
+    Q = TestFESpace(model,reffe_lgn;conformity=:L2)
     P = TransientTrialFESpace(Q)
 
-    reffe_lgn = ReferenceFE(lagrangian, Float64, order)
-    S = FESpace(model, reffe_lgn)
+    reffe_lgn = ReferenceFE(lagrangian, Float64, order+1)
+    S = FESpace(model, reffe_lgn;conformity=:H1)
     R = TransientTrialFESpace(S)
 
 
@@ -163,7 +166,7 @@ function Shallow_water_theta_newton(
     assem = SparseMatrixAssembler(sparse_matrix_type,Vector{Float64},X,Y)
     op = TransientFEOperator(res,jac,jac_t,X,Y)
     nls = NLSolver(show_trace=true,linesearch=BackTracking())
-    Tend = 1
+    Tend = 10
     ode_solver = ThetaMethod(nls,0.1,0.5)
     x = solve(ode_solver,op,uhn,0.0,Tend)
     dir = "swe-solver/1d-topo-output_zero"
@@ -190,7 +193,7 @@ function Shallow_water_theta_newton(
 end
 
 function h₀((x,y))
-    h = -topography((x,y)) +  1  + 0.2*exp(-10*(x-5)^2 -10*(y-5)^2)
+    h = -topography((x,y)) +  2  + 0.5*exp(-10*(x-5)^2 -10*(y-5)^2)
     h
 end
 
@@ -204,9 +207,6 @@ function u₀((x,y))
     u
 end
 
-function f((x,y))
-    f = 0.05
-    f
-end
 
-Shallow_water_theta_newton(1,3,h₀,u₀,topography,f)
+
+Shallow_water_theta_newton(1,4,h₀,u₀,topography)
