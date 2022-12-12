@@ -1,6 +1,7 @@
 using Pkg
 Pkg.activate(".")
 
+using Revise
 using Gridap
 using SparseMatricesCSR
 using SparseArrays
@@ -8,6 +9,10 @@ using WriteVTK
 using LinearAlgebra
 using LineSearches: BackTracking
 using GridapGmsh
+
+# Include local module
+include("mesh_generator.jl")
+using .MyMeshGenerator
 
 #Solves linear shallow water equations on a 2d plane
 
@@ -57,9 +62,13 @@ function Shallow_water_theta_newton(
         order,degree,h₀,u₀,topography,
         linear_solver::Gridap.Algebra.LinearSolver=Gridap.Algebra.BackslashSolver(),
         sparse_matrix_type::Type{<:AbstractSparseMatrix}=SparseMatrixCSC{Float64,Int})
+
+    # Generate the model
+    modelfile = "swe-solver/meshes/periodic_mesh_test.msh"
+    generate_rectangle_mesh(10.0, 10.0, modelfile, "rectangle", 0.1)
     #Create model
     dir = "swe-solver/output_linear_swe"
-    model = GmshDiscreteModel("swe-solver/meshes/periodic_mesh2.msh")
+    model = GmshDiscreteModel(modelfile)
 
     DC = ["left","right"]
 
@@ -69,8 +78,6 @@ function Shallow_water_theta_newton(
     Γ = BoundaryTriangulation(model,tags=DC)
     nΓ = get_normal_vector(Γ)
     dΓ = Measure(Γ,degree)
-    
-
     
 
     reffe_rt = ReferenceFE(lagrangian,VectorValue{2,Float64},order)
