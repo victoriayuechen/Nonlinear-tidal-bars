@@ -90,8 +90,6 @@ function Shallow_water_theta_newton(
     add_tag_from_tags!(labels,"inside",[9])
     DC = ["right","left"]
 
-    DC = ["left","right"]
-
     Ω = Triangulation(model)
     dΩ = Measure(Ω,degree)
     dω = Measure(Ω,degree,ReferenceDomain())
@@ -102,16 +100,17 @@ function Shallow_water_theta_newton(
     
 
     reffe_rt = ReferenceFE(raviart_thomas,Float64,order)
-    V = TestFESpace(model,reffe_rt,dirichlet_tags="boundary")
-    U = TrialFESpace(V)
+    V = TestFESpace(model,reffe_rt;conformity=:HDiv,dirichlet_tags="boundary")
+    U = TransientTrialFESpace(V)
 
     reffe_lgn = ReferenceFE(lagrangian,Float64,order)
-    Q = TestFESpace(model,reffe_lgn)
-    P = TrialFESpace(Q)
+    Q = TestFESpace(model,reffe_lgn;conformity=:L2)
+    P = TransientTrialFESpace(Q)
 
     reffe_lgn = ReferenceFE(lagrangian, Float64, order+1)
-    S = FESpace(model, reffe_lgn)
-    R = TrialFESpace(S)
+    S = TestFESpace(model, reffe_lgn;conformity=:H1)
+    R = TransientTrialFESpace(S)
+
 
 
     H1MM, RTMM, L2MM, H1MMchol, RTMMchol, L2MMchol = setup_and_factorize_mass_matrices(dΩ,R,S,U,V,P,Q)
@@ -160,43 +159,40 @@ function Shallow_water_theta_newton(
     τ=0.5*dt
     g = 9.81
     nlrtol = 1.0e-8
-    dir = "swe-solver/1d-topo-output_zero"
+    dir = "swe-solver/nonlinear_APVM_step"
 
     for step=1:N
-        function res((Δu,Δh,qvort,F),(v,q,s,v2))
+        function res((Δu,Δh,q,F),(w,ϕ,ϕ2,w2))
             one_m_θ = (1-θ)
             uiΔu    = un     + one_m_θ*Δu
             hiΔh    = hn     + one_m_θ*Δh
             hbiΔh   = hn + b + one_m_θ*Δh 
-            ∫((1.0/dt)*v⋅(Δu)-(∇⋅(v))*(g*hbiΔh + 0.5*uiΔu⋅uiΔu) + ((qvort-τ*(uiΔu⋅∇(qvort)))*(perp∘(F)))⋅v + (1.0/dt)*q*(Δh))dΩ + ∫(q*(DIV(F)))dω + ∫(s*qvort*hiΔh +  perp∘(∇(s))⋅uiΔu - s*fn + v2⋅(F-hiΔh*uiΔu))dΩ   
+            ∫((1.0/dt)*w⋅(Δu)-(∇⋅(w))*(g*hbiΔh + 0.5*uiΔu⋅uiΔu) + ((q-τ*(uiΔu⋅∇(q)))*(perp∘(F)))⋅w + (1.0/dt)*ϕ*(Δh) + ϕ*(∇⋅(F)) + ϕ2*q*hiΔh +  (perp∘(uiΔu))⋅(∇(ϕ2)) - ϕ2*fn + w2⋅(F-hiΔh*uiΔu))dΩ + ∫((g*(hbiΔh) + 0.5*(uiΔu⋅uiΔu))*(w⋅nΓ) - nΓ⋅(perp∘(uiΔu))*ϕ2)dΓ
 
         end
         
-        function jac((Δu,Δh,qvort,F),(du,dh,dq,dF),(v,q,s,v2))
+        function jac((Δu,Δh,q,F),(du,dh,dq,dF),(w,ϕ,ϕ2,w2))
             one_m_θ = (1-θ)
             uiΔu  = un + one_m_θ*Δu
             hiΔh  = hn + one_m_θ*Δh
             uidu  = one_m_θ*du
             hidh  = one_m_θ*dh
-            ∫((1.0/dt)*v⋅du +  (dq  - τ*(uiΔu⋅∇(dq)+uidu⋅∇(qvort)))*(perp∘(F))⋅v +  (qvort - τ*(uiΔu⋅∇(qvort)))*(perp∘(dF))⋅v -  (∇⋅(v))*(g*hidh +uiΔu⋅uidu) + (1.0/dt)*q*dh)dΩ + ∫(q*(DIV(dF)))dω  + ∫(s*(qvort*hidh+dq*hiΔh) + perp∘(∇(s))⋅uidu + v2⋅(dF-hiΔh*uidu-hidh*uiΔu))dΩ 
+            ∫((1.0/dt)*w⋅du +  (dq  - τ*(uiΔu⋅∇(dq) + uidu⋅∇(q)))*(perp∘(F))⋅w + (q - τ*(uiΔu⋅∇(q)))*(perp∘(dF))⋅w - (∇⋅(w))*(g*hidh +uiΔu⋅uidu) + (1.0/dt)*ϕ*dh + ϕ*(∇⋅(dF)) + ϕ2*(q*hidh + dq*hiΔh) +  (perp∘(uidu))⋅(∇(ϕ2)) + w2⋅(dF - hiΔh*uidu - hidh*uiΔu))dΩ + ∫((g*(hidh) + (uiΔu⋅uidu))*(w⋅nΓ) - nΓ⋅(perp∘(uidu))*ϕ2)dΓ
         end
-        dY = get_fe_basis(Y)
-        residualuhn=res(uhn,dY)
-        r=assemble_vector(residualuhn,Y)
         assem = SparseMatrixAssembler(sparse_matrix_type,Vector{Float64},X,Y)
         op = FEOperator(res,jac,X,Y,assem)
-        nls=NLSolver(show_trace=true)
+        nls=NLSolver(show_trace=true,linesearch=BackTracking())
         solver=FESolver(nls)
         solve!(uhn,solver,op)
         
         unv .=unv+get_free_dof_values(un)
         hnv .= hnv+get_free_dof_values(hn)
-        pvd[dt*Float64(step)] = createvtk(Ω,joinpath(dir,"nswe_cells_linear_shallow_water_$(dt*step)"*".vtu"),cellfields=["u"=>un,"h"=>hn])
+        pvd[dt*Float64(step)] = createvtk(Ω,joinpath(dir,"nonlinear_topo_$(dt*step)"*".vtu"),cellfields=["u"=>un,"h"=>hn])
     end
 end
 
 function h₀((x,y))
-    h = -topography((x,y)) +  1  + 0.1*exp(-100*(x-5)^2 -100*(y-5)^2)
+    h = -topography((x,y)) +  1  + 0.1*exp(-5*(x-5)^2 -5*(y-5)^2)
     h
 end
 
