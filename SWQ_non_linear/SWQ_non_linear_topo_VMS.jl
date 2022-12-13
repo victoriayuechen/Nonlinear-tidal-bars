@@ -1,11 +1,11 @@
-# using Pkg
+using Pkg
 # Pkg.add("Gridap")
 # Pkg.add("SparseMatricesCSR")
 # Pkg.add("SparseArrays")
 # Pkg.add("WriteVTK")
 # Pkg.add("LineSearches")
 # Pkg.add("LinearAlgebra")
-# Pkg.activate(".")
+Pkg.activate(".")
 
 using Gridap
 using SparseMatricesCSR
@@ -13,6 +13,8 @@ using SparseArrays
 using WriteVTK
 using LinearAlgebra
 using LineSearches: BackTracking
+using Gridap.TensorValues: meas #Added meas
+
 
 #Solves linear shallow water equations on a 2d plane
 
@@ -70,8 +72,7 @@ function Shallow_water_theta_newton(
     g = 9.80655
     H = 0.5
     h = 0.1         # To be changed 
-    ν = 10^(-6)
-    Δxₒ = 1         # To be changed
+    ν = 1e-6
     cD = 0.0025     # To be further determined
     ϕ = H - h 
 
@@ -102,6 +103,7 @@ function Shallow_water_theta_newton(
     nΓ = get_normal_vector(Γ)
     dΓ = Measure(Γ,degree)
     
+    Δxₒ = lazy_map(dx->dx^(1/2),get_cell_measure(Ω))
 
     
 
@@ -145,15 +147,17 @@ function Shallow_water_theta_newton(
 
 
     perp(u) = VectorValue(-u[2],u[1])
-    norm(u) = sqrt(u⋅u) + 1e-14
+    norm(u) = (meas∘(u)) + 1e-14 #Deleted sqrt for test
     dnorm(u,du) = u ⋅ du / norm(u)
     I = [1,1]
-    Rζ(u,ζ,b) = (∂t(ζ) + (ζ + b) * (∇⋅(u)) + ∇(ζ)'⋅u)
-    Rᵤ(u,ζ,b) = ∂t(u) + ∇(u)'⋅u + cD * norm∘(u) * u / (ζ+b) + g * (∇(ζ)) #To be added, forcing function Fₚ ; + f*perp∘(u) : coriolis neglected
-    dRζ(u,ζ,du,dζ,b) = dζ * (∇⋅(u)) + (ζ+b)*(∇⋅(du)) + du ⋅ (∇(ζ)) + u ⋅ (∇(ζ))
-    dRᵤ(u,ζ,du,dζ,b) = ∇(u)'⋅du + ∇(du)'⋅u + cD * dnorm∘(u,du) * u / (ζ+b) + cD * norm∘(u) * du / (ζ+b) + cD * norm∘(u) * u * dζ /(ζ+b)*(ζ+b) +  g * ∇(dζ) # + f*perp∘(du) : coriolis neglected
-    Lζ(v,w) = (h-H) * (∇⋅v) - (∇(w))⋅uₙ
-    Lᵤ(v,w) = -∇(v)⋅uₙ - g * ∇(w) # - f * E * I : coriolis neglected
+    Rζ(u,ζ,b) = (∂t(ζ) + (ζ + b) * (∇⋅u) + ∇(ζ)'⋅u)   #Changed the brackets around ∇⋅(u)
+    Rᵤ(u,ζ,b) = ∂t(u) + ∇(u)'⋅u + cD * norm(u) * u / (ζ+b) + g * ∇(ζ) #To be added, forcing function Fₚ ; + f*perp∘(u) : coriolis neglected, changed brackets around zeta
+    #Rᵤ(u,ζ,b) = ∂t(u) + ∇(u)'*u + cD * norm∘(u) * u / (ζ+b) + g * (∇(ζ)) #To be added, forcing function Fₚ ; + f*perp∘(u) : coriolis neglected
+    dRζ(u,ζ,du,dζ,b) = dζ * (∇⋅u) + (ζ+b)*(∇⋅du) + du ⋅ ∇(ζ) + u ⋅ ∇(dζ) # Added dζ
+    dRᵤ(u,ζ,du,dζ,b) = ∇(u)'⋅du + ∇(du)'⋅u + cD * (dnorm(u,du)) * u / (ζ+b) + cD * (norm(u)) * du / (ζ+b) + cD * (norm(u)) * u * dζ /((ζ+b)*(ζ+b)) +  g*∇(dζ) # + f*perp∘(du) : coriolis neglected, added extra brackets around norm
+    Lζ(v,w) = (h-H) * (∇⋅v) - ∇(w)⋅uₙ
+    #Lᵤ(v,w) = -∇(v)⋅uₙ - g * ∇(w) # - f * E * I : coriolis neglected
+    Lᵤ(v,w) = -∇(v)'⋅uₙ - g*∇(w) # - f * E * I : coriolis neglected, added the ' and star to dot
     τᵤ(a,ζ) = 1.0 / (c₁*ν/(Δxₒ.^2) + c₂*a/Δxₒ + c₃*cD*g*a/(ζ+1e-14))
     τζ(a,ζ) = Δxₒ.^2/(c₁*τᵤ(a,ζ))
     dτᵤdu(a,ζ,da) = - τᵤ(a,ζ)*τᵤ(a,ζ) * (c₂/Δxₒ + c₃*cD*g/(ζ+1e-14))*da
@@ -161,15 +165,31 @@ function Shallow_water_theta_newton(
     dτζdu(a,ζ,da) = τζ(a,ζ)/τᵤ(a,ζ)*dτᵤdu(a,ζ,da)
     dτζdζ(a,ζ,dζ) = τζ(a,ζ)/τᵤ(a,ζ)*dτᵤdζ(a,ζ,dζ)
 
-    res(t, (u, ζ), (v, w)) = ∫( -((ζ + H - h)*u)⋅∇(w) - g*ζ*(∇⋅v) + ∂t(ζ)*w + ∂t(u)⋅v + ((u⋅∇)*u)⋅v + (cD * norm∘(u)/(ζ + H - h) * u)⋅v
-        -Rζ∘(u, ζ, ϕ)*(τζ∘(norm∘(u), ζ)*Lζ∘(v, w))
-        -Rᵤ∘(u, ζ, ϕ)⋅(τᵤ∘(norm∘(u), ζ)*Lᵤ∘(v, w)))dΩ + ∫(g*ζ*v⋅nΓ)dΓ # Remember to add forcing function Fₚ
+   # res(t, (u, ζ), (v, w)) = ∫( -(ζ + H - h)*u⋅∇(w) - g*ζ*(∇⋅v) + ∂t(ζ)*w + ∂t(u)⋅v + ((u⋅∇)*u)⋅v + (cD * norm∘(u)/(ζ + H - h) * u)⋅v
+   #     -Rζ∘(u, ζ, ϕ)*(τζ∘(norm∘(u), ζ)*Lζ∘(v, w))
+   #     -Rᵤ∘(u, ζ, ϕ)⋅(τᵤ∘(norm∘(u), ζ)*Lᵤ∘(v, w)))dΩ + ∫(g*ζ*v⋅nΓ)dΓ # Remember to add forcing function Fₚ
 
-    jac(t, (u, ζ), (du, dζ), (v, w)) = ∫(((ζ + H - h)*du + u*dζ)⋅∇(w) + ((du⋅∇)*u + (u⋅∇)*du + cD * dnorm∘(u, du) * u / (ζ+H-h) + cD*norm∘(u)/(ζ+H-h) * du + cD*norm∘(u)*u*dζ / (ζ+H-h)^2)⋅v - g*dζ*(∇⋅v) 
-        -dRζ∘(u,ζ,du,dζ,ϕ) * τζ∘(norm∘(u), ζ)*Lζ∘(v, w) + Rζ∘(u, ζ, ϕ)*((dτζdu∘(norm∘(u), ζ, dnorm∘(u, du)) + dτζdζ∘(norm∘(u), ζ, dζ)) * Lζ∘(v, w))
-        -dRᵤ∘(u,ζ,du,dζ,ϕ)⋅(τᵤ∘(norm∘(u), ζ)*Lᵤ∘(v, w)) + Rᵤ∘(u, ζ, ϕ)⋅((dτζdu∘(norm∘(u), ζ, dnorm∘(u, du)) + dτζdζ∘(norm∘(u), ζ, dζ)) * Lᵤ∘(v, w)))dΩ + ∫(g*dζ*v⋅nΓ)dΓ
+    res(t, (u, ζ), (v, w)) = ∫( -(ζ + H - h)*u⋅∇(w) - g*ζ*(∇⋅v) + ∂t(ζ)*w + ∂t(u)⋅v + ∇(u)'⋅u⋅v + (cD * ((norm(u))/(ζ + H - h))*u)⋅v -
+        Rζ(u, ζ, ϕ)*((τζ(norm(u), ζ))*Lζ(v, w)) -
+        Rᵤ(u, ζ, ϕ)⋅((τᵤ(norm(u), ζ))*Lᵤ(v, w)))dΩ + ∫(g*ζ*(v⋅nΓ))dΓ # Remember to add forcing function Fₚ
+    #res(t, (u, ζ), (v, w)) = ∫( -(ζ + H - h)*u⋅∇(w) - g*ζ*(∇⋅v) + ∂t(ζ)*w + ∂t(u)⋅v + (u⋅∇)*u⋅v + (cD * ((norm(u))/(ζ + H - h))*u)⋅v -
+    #    Rζ(u, ζ, ϕ)*((τζ(norm(u), ζ))*Lζ(v, w)) -
+    #    Rᵤ(u, ζ, ϕ)⋅((τᵤ(norm(u), ζ))*Lᵤ(v, w)))dΩ + ∫(g*ζ*(v⋅nΓ))dΓ # Remember to add forcing function Fₚ
+
+    #jac(t, (u, ζ), (du, dζ), (v, w)) = ∫((-(ζ + H - h)*du - dζ*u)⋅∇(w) + ((du⋅∇)*u + (u⋅∇)*du + cD * dnorm∘(u, du) * u / (ζ+H-h) + cD*norm∘(u)/(ζ+H-h) * du + cD*norm∘(u)*u*dζ / (ζ+H-h)^2)⋅v - g*dζ*(∇⋅v) 
+    #    -dRζ∘(u,ζ,du,dζ,ϕ) * τζ∘(norm∘(u), ζ)*Lζ∘(v, w) + Rζ∘(u, ζ, ϕ)*((dτζdu∘(norm∘(u), ζ, dnorm∘(u, du)) + dτζdζ∘(norm∘(u), ζ, dζ)) * Lζ∘(v, w))
+    #    -dRᵤ∘(u,ζ,du,dζ,ϕ)⋅(τᵤ∘(norm∘(u), ζ)*Lᵤ∘(v, w)) + Rᵤ∘(u, ζ, ϕ)⋅((dτζdu∘(norm∘(u), ζ, dnorm∘(u, du)) + dτζdζ∘(norm∘(u), ζ, dζ)) * Lᵤ∘(v, w)))dΩ + ∫(g*dζ*v⋅nΓ)dΓ
     
-    jac_t(t, (u, ζ), (dut, dζt), (v, w)) = ∫(dζt*w +dut⋅v - dζt*τζ∘(norm∘(u), ζ)* Lζ∘(v, w) - dut⋅(τᵤ∘(norm∘(u), ζ)*L∘(v, w)))dΩ
+    jac(t, (u, ζ), (du, dζ), (v, w)) = ∫((-(ζ + H - h)*du - dζ*u)⋅∇(w) + (∇(du)'⋅u + ∇(u)'⋅du + cD * dnorm(u, du) * u / (ζ+H-h) + cD*norm(u)/(ζ+H-h) * du + cD*norm(u)*u*dζ / ((ζ+H-h)*(ζ+H-h)))⋅v - g*dζ*(∇⋅v) -
+        dRζ(u,ζ,du,dζ,ϕ) * τζ(norm(u), ζ)*Lζ(v, w) - Rζ(u, ζ, ϕ)*((dτζdu(norm(u), ζ, dnorm(u, du)) + dτζdζ(norm(u), ζ, dζ)) * Lζ(v, w)) -
+        dRᵤ(u,ζ,du,dζ,ϕ)⋅(τᵤ(norm(u), ζ)*Lᵤ(v, w)) - Rᵤ(u, ζ, ϕ)⋅((dτζdu(norm(u), ζ, dnorm(u, du)) + dτζdζ(norm(u), ζ, dζ)) * Lᵤ(v, w)))dΩ + ∫(g*dζ*(v⋅nΓ))dΓ
+
+    #jac(t, (u, ζ), (du, dζ), (v, w)) = ∫((-(ζ + H - h)*du - dζ*u)⋅∇(w) + ((u⋅∇)*u + (u⋅∇)*du + cD * dnorm(u, du) * u / (ζ+H-h) + cD*norm(u)/(ζ+H-h) * du + cD*norm(u)*u*dζ / ((ζ+H-h)*(ζ+H-h)))⋅v - g*dζ*(∇⋅v) -
+    #    dRζ(u,ζ,du,dζ,ϕ) * τζ(norm(u), ζ)*Lζ(v, w) - Rζ(u, ζ, ϕ)*((dτζdu(norm(u), ζ, dnorm(u, du)) + dτζdζ(norm(u), ζ, dζ)) * Lζ(v, w)) -
+    #    dRᵤ(u,ζ,du,dζ,ϕ)⋅(τᵤ(norm(u), ζ)*Lᵤ(v, w)) - Rᵤ(u, ζ, ϕ)⋅((dτζdu(norm(u), ζ, dnorm(u, du)) + dτζdζ(norm(u), ζ, dζ)) * Lᵤ(v, w)))dΩ + ∫(g*dζ*(v⋅nΓ))dΓ
+
+
+    jac_t(t, (u, ζ), (dut, dζt), (v, w)) = ∫(dζt*w +dut⋅v - dζt*(τζ(norm(u), ζ))*Lζ(v, w) - dut⋅(τᵤ(norm(u), ζ)*Lᵤ(v, w)))dΩ
 
     op = TransientFEOperator(res,jac,jac_t,X,Y)
     nls = NLSolver(show_trace=true,linesearch=BackTracking())
