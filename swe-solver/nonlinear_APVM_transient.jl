@@ -86,7 +86,7 @@ function Shallow_water_theta_newton(
     
     #Save directory of output files
     dir = "swe-solver/output_linear_swe"
-    # model = GmshDiscreteModel("swe-solver/meshes/10x10periodic2.msh")
+    #model = GmshDiscreteModel("swe-solver/meshes/10x10periodic2.msh")
     DC = ["left","right"]
     BC ="boundary"
     # #Make model
@@ -174,19 +174,22 @@ function Shallow_water_theta_newton(
     un,hn,q,F= uhn
 
     #Forcing function on u(t)
-    forcfunc(t) = VectorValue(0.5*cos((1/10)*π*t),0.0)  
+    forcfunc(t) = VectorValue(0.0,0.5*cos((1/5)*π*t))  
 
     #Define residual, jacobian in space and time
-    res(t,(u,h,q,F),(w,ϕ,ϕ2,w2)) = ∫(∂t(u)⋅w + ((q-τ*(u⋅∇(q)))*(perp∘(F)))⋅w - (∇⋅(w))*(g*(h+b) + 0.5*(u⋅u)) + ∂t(h)*ϕ + w2⋅(F-u*h) + ϕ2*(q*h) +  (perp∘(∇(ϕ2)))⋅u - (ϕ2*fn) + ϕ*(∇⋅(F)) + ((cd*(u⋅u)*u)/(h+b))⋅w)dΩ + ∫((g*(h+b) + 0.5*(u⋅u))*(w⋅nΓ) + nΓ⋅(perp∘(u))*ϕ2)dΓ
+    res(t,(u,h,q,F),(w,ϕ,ϕ2,w2)) = ∫(∂t(u)⋅w + ((q-τ*(u⋅∇(q)))*(perp∘(F)))⋅w - (∇⋅(w))*(g*(h+b) + 0.5*(u⋅u)) + ∂t(h)*ϕ + w2⋅(F-u*h) + ϕ2*(q*h) +  (perp∘(∇(ϕ2)))⋅u - (ϕ2*fn) + ϕ*(∇⋅(F)) + ((cd*(u⋅u)*u)/(h+b))⋅w - forcfunc(t)⋅w)dΩ + ∫((g*(h+b) + 0.5*(u⋅u))*(w⋅nΓ) + nΓ⋅(perp∘(u))*ϕ2)dΓ
     jac(t,(u,h,q,F),(du,dh,dq,dF),(w,ϕ,ϕ2,w2)) = ∫(((dq - τ*(u⋅∇(dq) + du⋅∇(q)))*(perp∘(F)))⋅w + ((q-τ*(u⋅∇(q)))*(perp∘(dF)))⋅w - (∇⋅(w))*(g*(dh) + (du⋅u)) + w2⋅(dF - du*h - dh*u) + ϕ2*(q*dh) + ϕ2*(dq*h) + du⋅(perp∘(∇(ϕ2))) + ϕ*(∇⋅(dF)) + ((cd*2*(du⋅u)*u)/(h+b))⋅w + ((cd*(u⋅u)*du)/(h+b))⋅w)dΩ+ ∫((g*(dh) + (du⋅u))*(w⋅nΓ) + nΓ⋅(perp∘(du))*ϕ2)dΓ
     jac_t(t,(u,h),(dut,dht),(w,ϕ)) = ∫(dut⋅w + dht*ϕ)dΩ
 
-
+    #Define operators and solvers
     op = TransientFEOperator(res,jac,jac_t,X,Y)
     nls = NLSolver(show_trace=true,linesearch=BackTracking())
     ode_solver = ThetaMethod(nls,dt,0.5)
     x = solve(ode_solver,op,uhn,T0,Tend)
-    dir = "swe-solver/nonlinear_drop_friction_msh"
+
+
+    #Output
+    dir = "swe-solver/nonlinear_flow_friction"#output dir
     if isdir(dir)
         output_file = paraview_collection(joinpath(dir,"nonlinear_topo"))do pvd
             pvd[0.0] = createvtk(Ω,joinpath(dir,"nonlinear_topo0.0.vtu"),cellfields=["u"=>un,"h"=>(hn+b),"b"=>b])
@@ -209,13 +212,14 @@ function Shallow_water_theta_newton(
     end
 end
 
+#Variable functions to be used to setup model
 function h₀((x,y))
-    h = -topography((x,y)) +  2  + 1*exp(-1*(x-5)^2 -1*(y-2.5)^2)
-    h
+    hout = -topography((x,y)) +  1   #1*exp(-1*(x-5)^2 -1*(y-2.5)^2)
+    hout
 end
 
 function topography((x,y))
-    p = 0.0
+    p = 0.5*exp(-5*(y-5)^2)-0.8*exp(-5*(y-5)^2-5*(x-5)^2)
     p
 end
 
