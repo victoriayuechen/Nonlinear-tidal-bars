@@ -63,16 +63,13 @@ function Shallow_water_theta_newton(
         linear_solver::Gridap.Algebra.LinearSolver=Gridap.Algebra.BackslashSolver(),
         sparse_matrix_type::Type{<:AbstractSparseMatrix}=SparseMatrixCSC{Float64,Int})
     #Create model
-    B = 1
-    L = 1
+    B = 1000
+    L = 10000
     dx = 1
     dy = 1
     g = 9.80655
-    H = 0.5
-    h = 0.1         # To be changed 
-    ν = 1e-6
-    cD = 0.0025     # To be further determined
-    ϕ = H - h 
+    H = 3
+ 
 
     #Stabilization parameters
     c₁ = 12
@@ -81,9 +78,9 @@ function Shallow_water_theta_newton(
 
     domain = (0,B,0,L)
     
-    partition = (10,10)
+    partition = (100,100)
     dir = "./RESULTS/"
-    model = CartesianDiscreteModel(domain,partition;isperiodic=(false,false))
+    model = CartesianDiscreteModel(domain,partition;isperiodic=(false,true))
 
 
     labels = get_face_labeling(model)
@@ -103,7 +100,7 @@ function Shallow_water_theta_newton(
     
     Δxₒ = lazy_map(dx->dx^(1/2),get_cell_measure(Ω))
 
-    ζ₀(x,t) = 0.008*x[1]
+    ζ₀(x,t) = 0.08*x[1]
     ζ₀(t::Real) = x->ζ₀(x,t)
     u₀(x,t) = VectorValue(0.0,0.0)
     u₀(t::Real) = x->u₀(x,t)
@@ -116,7 +113,13 @@ function Shallow_water_theta_newton(
     Q = TestFESpace(model,reffe_lgn)  #Maybe add conformity=:L2
     P = TransientTrialFESpace(Q)
 
+    h0(x,t) = 0.8*exp(-5*(x[1]-L/10)^2)
+    h0(t::Real) = x->h0(x,t)
+    h =  interpolate_everywhere(h0(0.0),P(0.0))
 
+    ν = 1e-6
+    cD = 0.0025     # To be further determined
+    ϕ = H - h 
     #RTMM,RTMMchol = setup_and_factorize_mass_matrices(dΩ,V,Q,U,P)
 
     Y = MultiFieldFESpace([V,Q,V])#∇u, ∇h
@@ -147,7 +150,7 @@ function Shallow_water_theta_newton(
     #forcfunc(t) = VectorValue(0.5,0)  
 
     global uₙ = interpolate_everywhere(u₀(0.0),U(0.0))
-    global ζₙ = interpolate_everywhere(ζ₀(0.0),P(0.0))
+    #global ζₙ = interpolate_everywhere(ζ₀(0.0),P(0.0))
     perp(u) = VectorValue(-u[2],u[1])
     norm(u) = (meas∘(u)) + 1e-14 #Deleted sqrt for test
     dnorm(u,du) = u ⋅ du / norm(u)
@@ -194,7 +197,7 @@ function Shallow_water_theta_newton(
     jac_t(t, (u, ζ), (dut, dζt), (v, w)) = ∫(dζt*w +dut⋅v - dζt*(τζ(norm(u), ζ))*Lζ(v, w) - dut⋅(τᵤ(norm(u), ζ)*Lᵤ(v, w)))dΩ
 
     op = TransientFEOperator(res,jac,jac_t,X,Y)
-    nls = NLSolver(show_trace=true,linesearch=BackTracking())#,iterations=10)  #Maybe add iteration= ...
+    nls = NLSolver(show_trace=true,linesearch=BackTracking(),iterations=50)  #Maybe add iteration= ...
     ode_solver = ThetaMethod(nls,dt,0.5)
     xₕ₀ = interpolate_everywhere([u₀(0.0),ζ₀(0.0)],X(0.0))
     x = solve(ode_solver,op,xₕ₀,0.0,Tend)
@@ -204,7 +207,7 @@ function Shallow_water_theta_newton(
             #pvd[0.0] = createvtk(Ω,joinpath(dir,"1d-topo0.0.vtu"),cellfields=["u"=>un,"h"=>(hn+b),"b"=>b])
             for (x,t) in x
                 u,ζ,F = x
-                pvd[t] = createvtk(Ω,joinpath(dir,"1d-topo$t.vtu"),cellfields=["u"=>u,"ζ+H-h"=>(ζ-h+H),"b"=>h])
+                pvd[t] = createvtk(Ω,joinpath(dir,"1d-topo$t.vtu"),cellfields=["u"=>u,"ζ"=>ζ,"h"=>h])
                 println("done $t/$Tend")
             end
         end
@@ -214,7 +217,7 @@ function Shallow_water_theta_newton(
             #pvd[0.0] = createvtk(Ω,joinpath(dir,"1d-topo0.0.vtu"),cellfields=["u"=>un,"h"=>(hn+b),"b"=>b])
             for (x,t) in x
                 u,ζ,F = x
-                pvd[t] = createvtk(Ω,joinpath(dir,"1d-topo$t.vtu"),cellfields=["u"=>u,"H+ζ-h"=>(H+ζ-h),"h"=>h])
+                pvd[t] = createvtk(Ω,joinpath(dir,"1d-topo$t.vtu"),cellfields=["u"=>u,"ζ"=>ζ,"h"=>h])
                 println("done $t/$Tend")
             end
         end
@@ -227,7 +230,7 @@ function h₀((x,y))
 end
 
 function topography((x,y))
-    p = 0.0 #0.8*exp(-5*(x-5)^2)
+    p = 0.8*exp(-5*(x-5)^2)
     p
 end
 
@@ -243,4 +246,4 @@ end
 Shallow_water_theta_newton(1,3,h₀,topography,0.1,0.2)
 
 #Measurement 
-Shallow_water_theta_newton(1,2,h₀,topography,0.1,3)
+Shallow_water_theta_newton(1,3,h₀,topography,0.1,1)
