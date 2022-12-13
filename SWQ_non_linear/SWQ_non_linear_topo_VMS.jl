@@ -2,7 +2,7 @@ using Pkg
 # Pkg.add("Gridap")
 # Pkg.add("SparseMatricesCSR")
 # Pkg.add("SparseArrays")
-# Pkg.add("WriteVTK")
+#Pkg.add("WriteVTK")
 # Pkg.add("LineSearches")
 # Pkg.add("LinearAlgebra")
 Pkg.activate(".")
@@ -14,6 +14,7 @@ using WriteVTK
 using LinearAlgebra
 using LineSearches: BackTracking
 using Gridap.TensorValues: meas #Added meas
+ 
 
 
 #Solves linear shallow water equations on a 2d plane
@@ -44,10 +45,7 @@ end
 
 function new_vtk_step(Ω,file,_cellfields)
     n = size(_cellfields)[1]
-    createvtk(Ω,
-              file,
-              cellfields=_cellfields,
-              nsubcells=n)
+    createvtk(Ω,file,cellfields=_cellfields,nsubcells=n)
 end
 
 function perp(u,n)
@@ -61,12 +59,12 @@ function Gridap.get_free_dof_values(functions...)
 
 
 function Shallow_water_theta_newton(
-        order,degree,h₀,u₀,topography,dt,Tend,
+        order,degree,h₀,topography,dt,Tend,
         linear_solver::Gridap.Algebra.LinearSolver=Gridap.Algebra.BackslashSolver(),
         sparse_matrix_type::Type{<:AbstractSparseMatrix}=SparseMatrixCSC{Float64,Int})
     #Create model
-    B = 10
-    L = 10
+    B = 1
+    L = 1
     dx = 1
     dy = 1
     g = 9.80655
@@ -83,7 +81,7 @@ function Shallow_water_theta_newton(
 
     domain = (0,B,0,L)
     
-    partition = (100,100)
+    partition = (10,10)
     dir = "./RESULTS/"
     model = CartesianDiscreteModel(domain,partition;isperiodic=(false,false))
 
@@ -105,56 +103,60 @@ function Shallow_water_theta_newton(
     
     Δxₒ = lazy_map(dx->dx^(1/2),get_cell_measure(Ω))
 
-    
+    ζ₀(x,t) = 0.008*x[1]
+    ζ₀(t::Real) = x->ζ₀(x,t)
+    u₀(x,t) = VectorValue(0.0,0.0)
+    u₀(t::Real) = x->u₀(x,t)
 
     reffe_rt = ReferenceFE(lagrangian,VectorValue{2,Float64},order)
     V = TestFESpace(model,reffe_rt)
-    U = TransientTrialFESpace(V)
+    U = TransientTrialFESpace(V,u₀)
 
     reffe_lgn = ReferenceFE(lagrangian,Float64,order)
-    Q = TestFESpace(model,reffe_lgn)
+    Q = TestFESpace(model,reffe_lgn)  #Maybe add conformity=:L2
     P = TransientTrialFESpace(Q)
 
 
-    RTMM,RTMMchol = setup_and_factorize_mass_matrices(dΩ,V,Q,U,P)
+    #RTMM,RTMMchol = setup_and_factorize_mass_matrices(dΩ,V,Q,U,P)
 
     Y = MultiFieldFESpace([V,Q,V])#∇u, ∇h
     X = TransientMultiFieldFESpace([U,P,U])
-    E = [0 -1; 1 0]
+    #E = [0 -1; 1 0]
     #Create initial solutions
-    a1(u,v) = ∫(v⋅u)dΩ
-    l1(v) = ∫(v⋅u₀)dΩ
-    uₙ = solve(AffineFEOperator(a1,l1,U,V))
+    #a1(u,v) = ∫(v⋅u)dΩ
+    #l1(v) = ∫(v⋅u₀)dΩ
+    #uₙ = solve(AffineFEOperator(a1,l1,U,V))
 
-    a2(u,v) = ∫(v*u)dΩ
-    l2(v) = ∫(v*h₀)dΩ
-    ζₙ = solve(AffineFEOperator(a2,l2,P,Q))
+    #a2(u,v) = ∫(v*u)dΩ
+    ##l2(v) = ∫(v*h₀)dΩ
+    #ζₙ = solve(AffineFEOperator(a2,l2,P,Q))
 
-    a3(u,v) = ∫(v*u)dΩ
-    l3(v) = ∫(v*topography)dΩ
-    b = solve(AffineFEOperator(a3,l3,P,Q))
+    #a3(u,v) = ∫(v*u)dΩ
+    #l3(v) = ∫(v*topography)dΩ
+    #b = solve(AffineFEOperator(a3,l3,P,Q))
 
 
-    unv,hnv = get_free_dof_values(uₙ,ζₙ)
-    F₀ = clone_fe_function(V,uₙ)
-    compute_mass_flux!(F₀,dΩ,V,RTMMchol,uₙ*ζₙ)
+    #unv,hnv = get_free_dof_values(uₙ,ζₙ)
+    #F₀ = clone_fe_function(V,uₙ)
+    #compute_mass_flux!(F₀,dΩ,V,RTMMchol,uₙ*ζₙ)
     
-    coriolis((x,y)) = [0 -1;1 0]
-    uhn = uh(uₙ,ζₙ,F₀,X,Y,dΩ)
-    uₙ, ζₙ, F = uhn
-    A = [0 -1; 1 0]
-    forcfunc(t) = VectorValue(0.5,0)  
+    ##coriolis((x,y)) = [0 -1;1 0]
+    #uhn = uh(uₙ,ζₙ,F₀,X,Y,dΩ)
+    #uₙ, ζₙ, F = uhn
+    #A = [0 -1; 1 0]
+    #forcfunc(t) = VectorValue(0.5,0)  
 
-
+    global uₙ = interpolate_everywhere(u₀(0.0),U(0.0))
+    global ζₙ = interpolate_everywhere(ζ₀(0.0),P(0.0))
     perp(u) = VectorValue(-u[2],u[1])
     norm(u) = (meas∘(u)) + 1e-14 #Deleted sqrt for test
     dnorm(u,du) = u ⋅ du / norm(u)
-    I = [1,1]
+    #I = [1,1]
     Rζ(u,ζ,b) = (∂t(ζ) + (ζ + b) * (∇⋅u) + ∇(ζ)'⋅u)   #Changed the brackets around ∇⋅(u)
-    Rᵤ(u,ζ,b) = ∂t(u) + ∇(u)'⋅u + cD * norm(u) * u / (ζ+b) + g * ∇(ζ) #To be added, forcing function Fₚ ; + f*perp∘(u) : coriolis neglected, changed brackets around zeta
+    Rᵤ(u,ζ,b) = ∂t(u) + ∇(u)'⋅u + cD * norm(u) * u / (ζ+b+1e-14) + g * ∇(ζ) #To be added, forcing function Fₚ ; + f*perp∘(u) : coriolis neglected, changed brackets around zeta
     #Rᵤ(u,ζ,b) = ∂t(u) + ∇(u)'*u + cD * norm∘(u) * u / (ζ+b) + g * (∇(ζ)) #To be added, forcing function Fₚ ; + f*perp∘(u) : coriolis neglected
     dRζ(u,ζ,du,dζ,b) = dζ * (∇⋅u) + (ζ+b)*(∇⋅du) + du ⋅ ∇(ζ) + u ⋅ ∇(dζ) # Added dζ
-    dRᵤ(u,ζ,du,dζ,b) = ∇(u)'⋅du + ∇(du)'⋅u + cD * (dnorm(u,du)) * u / (ζ+b) + cD * (norm(u)) * du / (ζ+b) + cD * (norm(u)) * u * dζ /((ζ+b)*(ζ+b)) +  g*∇(dζ) # + f*perp∘(du) : coriolis neglected, added extra brackets around norm
+    dRᵤ(u,ζ,du,dζ,b) = ∇(u)'⋅du + ∇(du)'⋅u + cD * (dnorm(u,du)) * u / (ζ+b) + cD * (norm(u)) * du / (ζ+b+1e-14) + cD * (norm(u)) * u * dζ /((ζ+b+1e-14)*(ζ+b+1e-14)) +  g*∇(dζ) # + f*perp∘(du) : coriolis neglected, added extra brackets around norm
     Lζ(v,w) = (h-H) * (∇⋅v) - ∇(w)⋅uₙ
     #Lᵤ(v,w) = -∇(v)⋅uₙ - g * ∇(w) # - f * E * I : coriolis neglected
     Lᵤ(v,w) = -∇(v)'⋅uₙ - g*∇(w) # - f * E * I : coriolis neglected, added the ' and star to dot
@@ -179,8 +181,8 @@ function Shallow_water_theta_newton(
     #jac(t, (u, ζ), (du, dζ), (v, w)) = ∫((-(ζ + H - h)*du - dζ*u)⋅∇(w) + ((du⋅∇)*u + (u⋅∇)*du + cD * dnorm∘(u, du) * u / (ζ+H-h) + cD*norm∘(u)/(ζ+H-h) * du + cD*norm∘(u)*u*dζ / (ζ+H-h)^2)⋅v - g*dζ*(∇⋅v) 
     #    -dRζ∘(u,ζ,du,dζ,ϕ) * τζ∘(norm∘(u), ζ)*Lζ∘(v, w) + Rζ∘(u, ζ, ϕ)*((dτζdu∘(norm∘(u), ζ, dnorm∘(u, du)) + dτζdζ∘(norm∘(u), ζ, dζ)) * Lζ∘(v, w))
     #    -dRᵤ∘(u,ζ,du,dζ,ϕ)⋅(τᵤ∘(norm∘(u), ζ)*Lᵤ∘(v, w)) + Rᵤ∘(u, ζ, ϕ)⋅((dτζdu∘(norm∘(u), ζ, dnorm∘(u, du)) + dτζdζ∘(norm∘(u), ζ, dζ)) * Lᵤ∘(v, w)))dΩ + ∫(g*dζ*v⋅nΓ)dΓ
-    
-    jac(t, (u, ζ), (du, dζ), (v, w)) = ∫((-(ζ + H - h)*du - dζ*u)⋅∇(w) + (∇(du)'⋅u + ∇(u)'⋅du + cD * dnorm(u, du) * u / (ζ+H-h) + cD*norm(u)/(ζ+H-h) * du + cD*norm(u)*u*dζ / ((ζ+H-h)*(ζ+H-h)))⋅v - g*dζ*(∇⋅v) -
+
+    jac(t, (u, ζ), (du, dζ), (v, w)) = ∫((-(ζ + H - h)*du - (dζ)*u)⋅∇(w) + (∇(du)'⋅u + ∇(u)'⋅du + cD * dnorm(u, du) * u / (ζ+H-h) + cD*norm(u)/(ζ+H-h) * du + cD*norm(u)*u*dζ / ((ζ+H-h)*(ζ+H-h)))⋅v - g*dζ*(∇⋅v) -
         dRζ(u,ζ,du,dζ,ϕ) * τζ(norm(u), ζ)*Lζ(v, w) - Rζ(u, ζ, ϕ)*((dτζdu(norm(u), ζ, dnorm(u, du)) + dτζdζ(norm(u), ζ, dζ)) * Lζ(v, w)) -
         dRᵤ(u,ζ,du,dζ,ϕ)⋅(τᵤ(norm(u), ζ)*Lᵤ(v, w)) - Rᵤ(u, ζ, ϕ)⋅((dτζdu(norm(u), ζ, dnorm(u, du)) + dτζdζ(norm(u), ζ, dζ)) * Lᵤ(v, w)))dΩ + ∫(g*dζ*(v⋅nΓ))dΓ
 
@@ -192,16 +194,17 @@ function Shallow_water_theta_newton(
     jac_t(t, (u, ζ), (dut, dζt), (v, w)) = ∫(dζt*w +dut⋅v - dζt*(τζ(norm(u), ζ))*Lζ(v, w) - dut⋅(τᵤ(norm(u), ζ)*Lᵤ(v, w)))dΩ
 
     op = TransientFEOperator(res,jac,jac_t,X,Y)
-    nls = NLSolver(show_trace=true,linesearch=BackTracking())
+    nls = NLSolver(show_trace=true,linesearch=BackTracking())#,iterations=10)  #Maybe add iteration= ...
     ode_solver = ThetaMethod(nls,dt,0.5)
-    x = solve(ode_solver,op,uhn,0.0,Tend)
+    xₕ₀ = interpolate_everywhere([u₀(0.0),ζ₀(0.0)],X(0.0))
+    x = solve(ode_solver,op,xₕ₀,0.0,Tend)
 
     if isdir(dir)
         output_file = paraview_collection(joinpath(dir,"1d-topo-output"))do pvd
             #pvd[0.0] = createvtk(Ω,joinpath(dir,"1d-topo0.0.vtu"),cellfields=["u"=>un,"h"=>(hn+b),"b"=>b])
             for (x,t) in x
-                u,h,F = x
-                pvd[t] = createvtk(Ω,joinpath(dir,"1d-topo$t.vtu"),cellfields=["u"=>u,"h"=>(h+b),"b"=>b])
+                u,ζ,F = x
+                pvd[t] = createvtk(Ω,joinpath(dir,"1d-topo$t.vtu"),cellfields=["u"=>u,"ζ+H-h"=>(ζ-h+H),"b"=>h])
                 println("done $t/$Tend")
             end
         end
@@ -210,8 +213,8 @@ function Shallow_water_theta_newton(
         output_file = paraview_collection(joinpath(dir,"1d-topo-output")) do pvd
             #pvd[0.0] = createvtk(Ω,joinpath(dir,"1d-topo0.0.vtu"),cellfields=["u"=>un,"h"=>(hn+b),"b"=>b])
             for (x,t) in x
-                u,h,F = x
-                pvd[t] = createvtk(Ω,joinpath(dir,"1d-topo$t.vtu"),cellfields=["u"=>u,"h"=>(h+b),"b"=>b])
+                u,ζ,F = x
+                pvd[t] = createvtk(Ω,joinpath(dir,"1d-topo$t.vtu"),cellfields=["u"=>u,"H+ζ-h"=>(H+ζ-h),"h"=>h])
                 println("done $t/$Tend")
             end
         end
@@ -228,15 +231,16 @@ function topography((x,y))
     p
 end
 
-function u₀((x,y))
-    u = VectorValue(0.0,0.0)
-    u
-end
+#function u₀((x,y))
+#    u = VectorValue(0.0,0.0)
+#    
+#    u
+#end
 
 
 
 #First a simple one to speed up the code --> tip from Oriol's meeting
-Shallow_water_theta_newton(1,3,h₀,u₀,topography,0.1,0.2)
+Shallow_water_theta_newton(1,3,h₀,topography,0.1,0.2)
 
 #Measurement 
-Shallow_water_theta_newton(1,3,h₀,u₀,topography,5,60*60*24)
+Shallow_water_theta_newton(1,2,h₀,topography,0.1,3)
