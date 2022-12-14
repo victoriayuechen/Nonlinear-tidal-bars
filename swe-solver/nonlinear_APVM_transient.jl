@@ -75,7 +75,7 @@ function Shallow_water_theta_newton(
     latitude = 52 #Latitude of the model being analysed
     η = 7.29e-5
     f = 2*η*sin(latitude*(π/180))
-    cd = 0.5
+    cd = 0.025
     g = 9.81
     periodic=true
     T0 = 0.0
@@ -174,7 +174,7 @@ function Shallow_water_theta_newton(
     un,hn,q,F= uhn
 
     #Forcing function on u(t)
-    forcfunc(t) = VectorValue(0.0,0.0*0.5*cos((1/5)*π*t))
+    forcfunc(t) = VectorValue(0.0,0.25*cos((1/5)*π*t))
     norm(u) = meas∘(u) + 1e-14
     dnorm(u,du) = u ⋅ du / norm(u)
 
@@ -216,12 +216,12 @@ end
 
 #Variable functions to be used to setup model
 function h₀((x,y))
-    hout = -topography((x,y)) +  1  +0.5*exp(-1*(x-5)^2 -1*(y-2.5)^2)
+    hout = -topography((x,y)) +  1
     hout
 end
 
 function topography((x,y))
-    p = 0.7*exp(-5*(y-5)^2)-0.7*exp(-5*(y-5)^2-5*(x-5)^2)
+    p = 0.5*exp(-5*(y-5)^2)-0.5*exp(-5*(y-5)^2-5*(x-5)^2)
     p
 end
 
