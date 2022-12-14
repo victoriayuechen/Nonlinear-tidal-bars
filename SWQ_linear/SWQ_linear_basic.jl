@@ -1,23 +1,37 @@
-# using Pkg
-# Pkg.add("Gridap")
-# Pkg.add("SparseMatricesCSR")
-# Pkg.add("SparseArrays")
-# Pkg.add("WriteVTK")
-# Pkg.add("ProgressBars")
-# Pkg.activate(".")
+using Pkg
+Pkg.activate(".")
 
 using Gridap
 using SparseMatricesCSR
 using SparseArrays
 using WriteVTK
-using ProgressBars
+using LinearAlgebra
+using LineSearches: BackTracking
 
 #Solves linear shallow water equations on a 2d plane
 
-function uh(u₀,h₀,X,Y,dΩ)
-    a((u,h),(w,ϕ)) = ∫(w⋅u + ϕ*h)dΩ
-    b((w,ϕ)) = ∫(w⋅u₀ + ϕ*h₀)dΩ
+function uh(u₀,h₀,F₀,X,Y,dΩ)
+    a((u,h,u2),(w,ϕ,w2)) = ∫(w⋅u + ϕ*h + w2⋅u2)dΩ
+    b((w,ϕ,w2)) = ∫(w⋅u₀ + ϕ*h₀ + w2⋅F₀)dΩ
     solve(AffineFEOperator(a,b,X,Y))
+end
+
+function compute_mass_flux!(F,dΩ,V,RTMMchol,u)
+    b(v) = ∫(v⋅u)dΩ
+    Gridap.FESpaces.assemble_vector!(b, get_free_dof_values(F), V)
+    ldiv!(RTMMchol,get_free_dof_values(F))
+end
+
+clone_fe_function(space,f)=FEFunction(space,copy(get_free_dof_values(f)))
+
+function setup_and_factorize_mass_matrices(dΩ,V,Q,U,P)
+    amm(a,b) = ∫(a⋅b)dΩ
+
+    RTMM = assemble_matrix(amm,U,V)
+
+    RTMMchol = lu(RTMM)
+
+    RTMM,RTMMchol
 end
 
 function new_vtk_step(Ω,file,_cellfields)
@@ -39,49 +53,60 @@ function Gridap.get_free_dof_values(functions...)
 
 
 function Shallow_water_theta_newton(
-        order,degree,h₀,u₀,α,
+        order,degree,h₀,u₀,topography,
         linear_solver::Gridap.Algebra.LinearSolver=Gridap.Algebra.BackslashSolver(),
         sparse_matrix_type::Type{<:AbstractSparseMatrix}=SparseMatrixCSC{Float64,Int})
+
+
+    dir = "swe-solver/output_linear_swe"
     #Create model
-    B = 1
-    L = 1
+    B = 2000
+    L = 10000
     dx = 1
     dy = 1
+    latitude = 52
+    η = 7.29e-5
+    f = 2*η*sin(latitude*(π/180))
+    g = 9.81
+
+    #Domain properties
     domain = (0,B,0,L)
-    
-    partition = (100,100)
-    dir = "./RESULTS/"
-    model = CartesianDiscreteModel(domain,partition)
+    partition = (100,200)
 
+    model = CartesianDiscreteModel(domain,partition;isperiodic=(false,true))
 
+    #Make labels
     labels = get_face_labeling(model)
     add_tag_from_tags!(labels,"bottom",[1,2,5])
     add_tag_from_tags!(labels,"left",[7])
     add_tag_from_tags!(labels,"right",[8])
     add_tag_from_tags!(labels,"top",[3,4,6])
     add_tag_from_tags!(labels,"inside",[9])
-    nuemanntaggs = ["left","right"]
+    DC = ["right","left"]
 
     Ω = Triangulation(model)
     dΩ = Measure(Ω,degree)
-    Γ = BoundaryTriangulation(model,tags=nuemanntaggs)
+    dω = Measure(Ω,degree,ReferenceDomain())
+    Γ = BoundaryTriangulation(model,tags=DC)
+    nΓ = get_normal_vector(Γ)
     dΓ = Measure(Γ,degree)
     
 
-    reffe_rt = ReferenceFE(raviart_thomas,Float64,order)
-    V = FESpace(model,reffe_rt;conformity=:HDiv,dirichlet_tags = "boundary")
-    U = TrialFESpace(V,VectorValue(0.0,0.0))
+    
+
+    reffe_rt = ReferenceFE(lagrangian,VectorValue{2,Float64},order)
+    V = TestFESpace(model,reffe_rt)
+    U = TransientTrialFESpace(V)
 
     reffe_lgn = ReferenceFE(lagrangian,Float64,order)
-    Q = FESpace(model,reffe_lgn;conformity=:L2)
-    P = TrialFESpace(Q)
+    Q = TestFESpace(model,reffe_lgn)
+    P = TransientTrialFESpace(Q)
 
-    # reffe_lgn = ReferenceFE(lagrangian,Float64,order+1)
-    # S = FESpace(model,reffe_lgn;conformity=:H1)
-    # R = TrailFESpace(S)
 
-    X = MultiFieldFESpace([V,Q])#∇u, ∇h
-    Y = MultiFieldFESpace([U,P])
+    RTMM,RTMMchol = setup_and_factorize_mass_matrices(dΩ,V,Q,U,P)
+
+    Y = MultiFieldFESpace([V,Q,V])#∇u, ∇h
+    X = TransientMultiFieldFESpace([U,P,U])
 
     E = [0 -1; 1 0]
     #Create initial solutions
@@ -93,62 +118,62 @@ function Shallow_water_theta_newton(
     l2(v) = ∫(v*h₀)dΩ
     hn = solve(AffineFEOperator(a2,l2,P,Q))
 
-    b = 2.0
+    a3(u,v) = ∫(v*u)dΩ
+    l3(v) = ∫(v*topography)dΩ
+    b = solve(AffineFEOperator(a3,l3,P,Q))
     unv,hnv = get_free_dof_values(un,hn)
-    E = [0 -1; 1 0 ]
-    uhn = uh(un,hn,X,Y,dΩ)
-    un, hn = uhn
+    F₀ = clone_fe_function(V,un)
+    compute_mass_flux!(F₀,dΩ,V,RTMMchol,un*hn)
+    
+    
+    uhn = uh(un,hn,F₀,X,Y,dΩ)
+    un, hn,F = uhn
 
-    function run_simulation(pvd=nothing)
-        N = 100
-        dt = 100
-        g = 9.81
-        for step = ProgressBar(1:N)
-            function residual((u,h),(w,ϕ))
-                #+ α*dt*f*(w⋅(E×u))
-                #+ α*dt*f*(w⋅(E×un))
-                ∫((w⋅u) - g*α*dt*DIV(w)*h - w⋅un - α*dt*g*DIV(w)*hn
-                + ϕ*h + α*dt*(b)*ϕ*DIV(u) -ϕ*hn + α*dt*(b)*ϕ*DIV(u))dΩ
-            end
-
-            assem = SparseMatrixAssembler(sparse_matrix_type,Vector{Float64},X,Y)
-            op = FEOperator(residual,X,Y,assem)
-            nls = NLSolver(linear_solver)
-            solver = FESolver(nls)
-            solve!(uhn,solver,op)
+    #Forcing functions and coriolis function
+    coriolis(u) = f*VectorValue(-u[2],u[1])
+    forcfunc(t) = VectorValue(0.0,0.5*cos((1/5)*π*t))  
 
 
-            unv .= get_free_dof_values(un)
-            hnv .= get_free_dof_values(hn)
-            # println("$(step)/$(N) complete")
-            #add = output results
-            pvd[dt*Float64(step)] = createvtk(Ω,joinpath(dir,"SWQ_linear_$(dt*step)"*".vtu"),cellfields=["u"=>un,"h"=>hn])
-        end
-    end
+    res(t,(u,h,F),(w,ϕ,w2)) = ∫(∂t(u)⋅w -g*(∇⋅(w))*(b+h)  + ∂t(h)*ϕ  + w2⋅(F - u*h) - F⋅(∇(ϕ))-forcfunc(t)⋅w + (coriolis∘u)⋅w)dΩ + ∫(g*(h+b)*(w⋅nΓ))dΓ 
+    jac(t,(u,h,F),(du,dh,dF),(w,ϕ,w2)) = ∫(-g*(∇⋅(w))*dh  + w2⋅(dF -du*h -u*dh) - dF⋅(∇(ϕ)) + (coriolis∘du)⋅w)dΩ + ∫(g*dh*(w⋅nΓ))dΓ
+    jac_t(t,(u,h),(dut,dht),(w,ϕ)) = ∫(dut⋅w + dht*ϕ)dΩ
+
+
+    op = TransientFEOperator(res,jac,jac_t,X,Y)
+    nls = NLSolver(show_trace=true,linesearch=BackTracking())
+    Tend = 20*5
+    ode_solver = ThetaMethod(nls,1,0.5)
+    x = solve(ode_solver,op,uhn,0.0,Tend)
+    dir = "./1d-topo-output_zero"
     if isdir(dir)
-        pvdfile = joinpath(dir,"SWQ_linear"*".pvd")
-        paraview_collection(run_simulation,pvdfile)
+        output_file = paraview_collection(joinpath(dir,"1d-topo-output"))do pvd
+            #pvd[0.0] = createvtk(Ω,joinpath(dir,"1d-topo0.0.vtu"),cellfields=["u"=>un,"h"=>(hn+b),"b"=>b])
+            for (x,t) in x
+                u,h,F = x
+                pvd[t] = createvtk(Ω,joinpath(dir,"1d-topo$t.vtu"),cellfields=["u"=>u,"h"=>(h+b),"b"=>b])
+                println("done $t/$Tend")
+            end
+        end
     else
         mkdir(dir)
-        pvdfile = joinpath(dir,"SWQ_linear"*".pvd")
-        paraview_collection(run_simulation,pvdfile)
+        output_file = paraview_collection(joinpath(dir,"1d-topo-output")) do pvd
+            #pvd[0.0] = createvtk(Ω,joinpath(dir,"1d-topo0.0.vtu"),cellfields=["u"=>un,"h"=>(hn+b),"b"=>b])
+            for (x,t) in x
+                u,h,F = x
+                pvd[t] = createvtk(Ω,joinpath(dir,"1d-topo$t.vtu"),cellfields=["u"=>u,"h"=>(h+b),"b"=>b])
+                println("done $t/$Tend")
+            end
+        end
     end
 end
 
 function h₀((x,y))
-    if (x < 0.25 && y < 0.25)
-        h = 0.0
-    elseif (x > 0.75 && y > 0.75)
-        h = 0.1
-    else
-        # h = sin(2*π*x)*sin(2*π*y)
-        h = 0.5
-    end
+    h = -topography((x,y)) +  1  #+ 0.1*exp(-100*(x-0.5)^2 -100*(y-0.25)^2)
     h
 end
 
 function topography((x,y))
-    p = 0.5*sin(π*x)*sin(π*y)
+    p = 0.5*exp(-10*(x-5-cos((y)*π*(1/10)))^2)
     p
 end
 
@@ -157,4 +182,4 @@ function u₀((x,y))
     u
 end
 
-Shallow_water_theta_newton(1,3,h₀,u₀,0.5)
+Shallow_water_theta_newton(1,3,h₀,u₀,topography)
