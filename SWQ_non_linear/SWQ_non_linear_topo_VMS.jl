@@ -113,8 +113,8 @@ function Shallow_water_theta_newton(
     Q = TestFESpace(model,reffe_lgn)  #Maybe add conformity=:L2
     P = TransientTrialFESpace(Q)
 
-    h0(x,t) = 0.8*exp(-(x[1]-L/2)^2)
-    dh0(x,t) = (h0(x+1e-9,t)-h0(x))/1e-9
+    h0(x,t) = 0.8*exp(-0.001*(x[1]-L/2)^2)
+    dh0(x,t) = (h0(x+1e-9,t)-h0(x,t))/1e-9
     h0(t::Real) = x->h0(x,t)
     dh0(t::Real) = x->h0(x,t)
     h =  interpolate_everywhere(h0(0.0),P(0.0))
@@ -125,8 +125,8 @@ function Shallow_water_theta_newton(
     ϕ = H - h 
     #RTMM,RTMMchol = setup_and_factorize_mass_matrices(dΩ,V,Q,U,P)
 
-    Y = MultiFieldFESpace([V,Q,V])#∇u, ∇h
-    X = TransientMultiFieldFESpace([U,P,U])
+    Y = MultiFieldFESpace([V,Q])#∇u, ∇h
+    X = TransientMultiFieldFESpace([U,P])
     #E = [0 -1; 1 0]
     #Create initial solutions
     #a1(u,v) = ∫(v⋅u)dΩ
@@ -156,12 +156,12 @@ function Shallow_water_theta_newton(
     #global ζₙ = interpolate_everywhere(ζ₀(0.0),P(0.0))
     perp(u) = VectorValue(-u[2],u[1])
     norm(u) = (meas∘(u)) + 1e-14 #Deleted sqrt for test
-    #σ = 2*pi/44700
-    #U_start = 0.5
-    #f = 2*2*pi/86164.0 *sin(50 *pi/180)
+    σ = 2*pi/44700
+    U_start = 0.5
+    f = 2*2*pi/86164.0 *sin(50 *pi/180)
     #Fₚ(x,t) = VectorValue(-σ*U_start*sin(σ*t)+cD*meas∘(U_start*cos(σ*t))*U_start*cos(σ*t)/H,-f*U_start*cos(σ*t))
     #Fₚ(t::Real) = x->Fₚ(x,t)
-    #Fₙ = interpolate_everywhere(Fₚ(0.0),U(0.0))
+    Fₚ(t) = VectorValue(-f*U_start*cos(σ*t),-σ*U_start*sin(σ*t)+cD*abs(U_start*cos(σ*t))*U_start*cos(σ*t)/H)
     dnorm(u,du) = u ⋅ du / norm(u)
     #I = [1,1]
     Rζ(u,ζ,b) = (∂t(ζ) + (ζ + b) * (∇⋅u) + ∇(ζ)'⋅u)   #Changed the brackets around ∇⋅(u)
@@ -183,7 +183,7 @@ function Shallow_water_theta_newton(
    #     -Rζ∘(u, ζ, ϕ)*(τζ∘(norm∘(u), ζ)*Lζ∘(v, w))
    #     -Rᵤ∘(u, ζ, ϕ)⋅(τᵤ∘(norm∘(u), ζ)*Lᵤ∘(v, w)))dΩ + ∫(g*ζ*v⋅nΓ)dΓ # Remember to add forcing function Fₚ
 
-    res(t, (u, ζ), (v, w)) = ∫( -(ζ + H - h)*u⋅∇(w) - g*ζ*(∇⋅v) + ∂t(ζ)*w + ∂t(u)⋅v + ∇(u)'⋅u⋅v + (cD * ((norm(u))/(ζ + H - h))*u)⋅v -
+    res(t, (u, ζ), (v, w)) = ∫( -(ζ + H - h)*u⋅∇(w) - g*ζ*(∇⋅v) + ∂t(ζ)*w + ∂t(u)⋅v + ∇(u)'⋅u⋅v + (cD * ((norm(u))/(ζ + H - h))*u)⋅v - Fₚ(t) ⋅ v -
         Rζ(u, ζ, ϕ)*((τζ(norm(u), ζ))*Lζ(v, w)) -
         Rᵤ(u, ζ, ϕ)⋅((τᵤ(norm(u), ζ))*Lᵤ(v, w)))dΩ + ∫(g*ζ*(v⋅nΓ))dΓ # Remember to add forcing function Fₚ
     #res(t, (u, ζ), (v, w)) = ∫( -(ζ + H - h)*u⋅∇(w) - g*ζ*(∇⋅v) + ∂t(ζ)*w + ∂t(u)⋅v + (u⋅∇)*u⋅v + (cD * ((norm(u))/(ζ + H - h))*u)⋅v -
@@ -194,7 +194,7 @@ function Shallow_water_theta_newton(
     #    -dRζ∘(u,ζ,du,dζ,ϕ) * τζ∘(norm∘(u), ζ)*Lζ∘(v, w) + Rζ∘(u, ζ, ϕ)*((dτζdu∘(norm∘(u), ζ, dnorm∘(u, du)) + dτζdζ∘(norm∘(u), ζ, dζ)) * Lζ∘(v, w))
     #    -dRᵤ∘(u,ζ,du,dζ,ϕ)⋅(τᵤ∘(norm∘(u), ζ)*Lᵤ∘(v, w)) + Rᵤ∘(u, ζ, ϕ)⋅((dτζdu∘(norm∘(u), ζ, dnorm∘(u, du)) + dτζdζ∘(norm∘(u), ζ, dζ)) * Lᵤ∘(v, w)))dΩ + ∫(g*dζ*v⋅nΓ)dΓ
 
-    jac(t, (u, ζ), (du, dζ), (v, w)) = ∫((-(ζ + H - h)*du - (dζ-dh)*u)⋅∇(w) + (∇(du)'⋅u + ∇(u)'⋅du + cD * dnorm(u, du) * u / (ζ+H-h) + cD*norm(u)/(ζ+H-h) * du + cD*norm(u)*u*(dζ-dh) / ((ζ+H-h)*(ζ+H-h)))⋅v - g*dζ*(∇⋅v) -
+    jac(t, (u, ζ), (du, dζ), (v, w)) = ∫((-(ζ + H - h)*du - (dζ)*u)⋅∇(w) + (∇(du)'⋅u + ∇(u)'⋅du + cD * dnorm(u, du) * u / (ζ+H-h) + cD*norm(u)/(ζ+H-h) * du + cD*norm(u)*u*(dζ) / ((ζ+H-h)*(ζ+H-h)))⋅v - g*dζ*(∇⋅v) -
         dRζ(u,ζ,du,dζ,ϕ) * τζ(norm(u), ζ)*Lζ(v, w) - Rζ(u, ζ, ϕ)*((dτζdu(norm(u), ζ, dnorm(u, du)) + dτζdζ(norm(u), ζ, dζ)) * Lζ(v, w)) -
         dRᵤ(u,ζ,du,dζ,ϕ)⋅(τᵤ(norm(u), ζ)*Lᵤ(v, w)) - Rᵤ(u, ζ, ϕ)⋅((dτζdu(norm(u), ζ, dnorm(u, du)) + dτζdζ(norm(u), ζ, dζ)) * Lᵤ(v, w)))dΩ + ∫(g*dζ*(v⋅nΓ))dΓ
 
@@ -215,7 +215,7 @@ function Shallow_water_theta_newton(
         output_file = paraview_collection(joinpath(dir,"1d-topo-output"))do pvd
             #pvd[0.0] = createvtk(Ω,joinpath(dir,"1d-topo0.0.vtu"),cellfields=["u"=>un,"h"=>(hn+b),"b"=>b])
             for (x,t) in x
-                u,ζ,F = x
+                u,ζ = x
                 pvd[t] = createvtk(Ω,joinpath(dir,"1d-topo$t.vtu"),cellfields=["u"=>u,"ζ"=>ζ,"h"=>h])
                 println("done $t/$Tend")
             end
@@ -225,7 +225,7 @@ function Shallow_water_theta_newton(
         output_file = paraview_collection(joinpath(dir,"1d-topo-output")) do pvd
             #pvd[0.0] = createvtk(Ω,joinpath(dir,"1d-topo0.0.vtu"),cellfields=["u"=>un,"h"=>(hn+b),"b"=>b])
             for (x,t) in x
-                u,ζ,F = x
+                u,ζ = x
                 pvd[t] = createvtk(Ω,joinpath(dir,"1d-topo$t.vtu"),cellfields=["u"=>u,"ζ"=>ζ,"h"=>h])
                 println("done $t/$Tend")
             end
