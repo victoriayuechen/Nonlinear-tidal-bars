@@ -8,7 +8,7 @@ using WriteVTK
 using LinearAlgebra
 using LineSearches: BackTracking
 using GridapGmsh
-
+using Gridap.TensorValues: meas
 #Solves nonlinear shallow water equations on a 2d plane
 #Makes use of the Anticipated Potential Vorticity Method (APVM) produced by McRae and Cotter: https://doi.org/10.1002/qj.2291 
 #Implementation in Gridap for this 2D domain also uses similar code produced by the Gridap GeoSciences github: https://github.com/gridapapps/GridapGeosciences.jl
@@ -32,7 +32,7 @@ function compute_potential_vorticity!(q,H1h,H1hchol,dΩ,R,S,h,u,f)
     Gridap.FESpaces.assemble_matrix_and_vector!(a, c, H1h, get_free_dof_values(q), R, S)
     lu!(H1hchol, H1h)
     ldiv!(H1hchol, get_free_dof_values(q))
-  end
+end
 
 clone_fe_function(space,f)=FEFunction(space,copy(get_free_dof_values(f)))
 
@@ -75,7 +75,7 @@ function Shallow_water_theta_newton(
     latitude = 52 #Latitude of the model being analysed
     η = 7.29e-5
     f = 2*η*sin(latitude*(π/180))
-    cd = 0.5
+    cd = 0.025
     g = 9.81
     periodic=true
     T0 = 0.0
@@ -174,11 +174,13 @@ function Shallow_water_theta_newton(
     un,hn,q,F= uhn
 
     #Forcing function on u(t)
-    forcfunc(t) = VectorValue(0.0,0.0*0.5*cos((1/5)*π*t))  
+    forcfunc(t) = VectorValue(0.0,0.25*cos((1/5)*π*t))
+    norm(u) = meas∘(u) + 1e-14
+    dnorm(u,du) = u ⋅ du / norm(u)
 
     #Define residual, jacobian in space and time
-    res(t,(u,h,q,F),(w,ϕ,ϕ2,w2)) = ∫(∂t(u)⋅w + ((q-τ*(u⋅∇(q)))*(perp∘(F)))⋅w - (∇⋅(w))*(g*(h+b) + 0.5*(u⋅u)) + ∂t(h)*ϕ + w2⋅(F-u*h) + ϕ2*(q*h) +  (perp∘(∇(ϕ2)))⋅u - (ϕ2*fn) + ϕ*(∇⋅(F))- forcfunc(t)⋅w)dΩ + ∫((g*(h+b) + 0.5*(u⋅u))*(w⋅nΓ) + nΓ⋅(perp∘(u))*ϕ2)dΓ # + ((cd*(u⋅u)*u)/(h+b))⋅w 
-    jac(t,(u,h,q,F),(du,dh,dq,dF),(w,ϕ,ϕ2,w2)) = ∫(((dq - τ*(u⋅∇(dq) + du⋅∇(q)))*(perp∘(F)))⋅w + ((q-τ*(u⋅∇(q)))*(perp∘(dF)))⋅w - (∇⋅(w))*(g*(dh) + (du⋅u)) + w2⋅(dF - du*h - dh*u) + ϕ2*(q*dh) + ϕ2*(dq*h) + du⋅(perp∘(∇(ϕ2))) + ϕ*(∇⋅(dF)))dΩ+ ∫((g*(dh) + (du⋅u))*(w⋅nΓ) + nΓ⋅(perp∘(du))*ϕ2)dΓ # + ((cd*2*(du⋅u)*u)/(h+b))⋅w + ((cd*(u⋅u)*du)/(h+b))⋅w
+    res(t,(u,h,q,F),(w,ϕ,ϕ2,w2)) = ∫(∂t(u)⋅w + ((q-τ*(u⋅∇(q)))*(perp∘(F)))⋅w - (∇⋅(w))*(g*(h+b) + 0.5*(u⋅u)) + ∂t(h)*ϕ + w2⋅(F-u*h) + ϕ2*(q*h) +  (perp∘(∇(ϕ2)))⋅u - (ϕ2*fn) + ϕ*(∇⋅(F))- forcfunc(t)⋅w + ((cd*(norm(u))*u)/(h+b+1e-14))⋅w)dΩ + ∫((g*(h+b) + 0.5*(u⋅u))*(w⋅nΓ) + nΓ⋅(perp∘(u))*ϕ2)dΓ 
+    jac(t,(u,h,q,F),(du,dh,dq,dF),(w,ϕ,ϕ2,w2)) = ∫(((dq - τ*(u⋅∇(dq) + du⋅∇(q)))*(perp∘(F)))⋅w + ((q-τ*(u⋅∇(q)))*(perp∘(dF)))⋅w - (∇⋅(w))*(g*(dh) + (du⋅u)) + w2⋅(dF - du*h - dh*u) + ϕ2*(q*dh) + ϕ2*(dq*h) + du⋅(perp∘(∇(ϕ2))) + ϕ*(∇⋅(dF)) + (cd*(dnorm(u,du)*u)/(h+b+1e-14) + cd*(norm(u)/(h+b+1e-14)*du) + cd*(norm(u)*u*h)/((h+b+1e-14)*(h+b+1e-14)))⋅w )dΩ+ ∫((g*(dh) + (du⋅u))*(w⋅nΓ) + nΓ⋅(perp∘(du))*ϕ2)dΓ # + ((cd*2*(du⋅u)*u)/(h+b))⋅w + ((cd*(u⋅u)*du)/(h+b))⋅w
     jac_t(t,(u,h),(dut,dht),(w,ϕ)) = ∫(dut⋅w + dht*ϕ)dΩ
 
     #Define operators and solvers
