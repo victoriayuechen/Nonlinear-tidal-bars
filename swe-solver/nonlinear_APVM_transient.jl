@@ -69,8 +69,8 @@ function Shallow_water_theta_newton(
 
 
     #Parameters
-    B = 10
-    L = 10
+    B = 100
+    L = 100
     partition = (50,50) #Split into X by X  cells
     latitude = 52 #Latitude of the model being analysed
     η = 7.29e-5
@@ -79,13 +79,13 @@ function Shallow_water_theta_newton(
     g = 9.81
     periodic=true
     T0 = 0.0
-    Tend = 10.0
-    dt = 0.1
+    Tend = 100
+    dt = 1
     τ = dt*0.5
 
     
     #Save directory of output files
-    dir = "swe-solver/output_linear_swe"
+    dir = "swe-solver/APVM_drop"
     #model = GmshDiscreteModel("swe-solver/meshes/10x10periodic2.msh")
     DC = ["left","right"]
     BC ="boundary"
@@ -188,8 +188,7 @@ function Shallow_water_theta_newton(
     x = solve(ode_solver,op,uhn,T0,Tend)
 
 
-    #Output
-    dir = "swe-solver/nonlinear_flow_friction"#output dir
+
     if isdir(dir)
         output_file = paraview_collection(joinpath(dir,"nonlinear_topo"))do pvd
             pvd[0.0] = createvtk(Ω,joinpath(dir,"nonlinear_topo0.0.vtu"),cellfields=["u"=>un,"h"=>(hn+b),"b"=>b])
@@ -214,12 +213,12 @@ end
 
 #Variable functions to be used to setup model
 function h₀((x,y))
-    hout = -topography((x,y)) +  1  +0.5*exp(-1*(x-5)^2 -1*(y-2.5)^2)
+    hout = -topography((x,y)) +  0.5 + 0.05*exp(-0.01*(x-50)^2 -0.01*(y-25)^2)
     hout
 end
 
 function topography((x,y))
-    p = 0.7*exp(-5*(y-5)^2)-0.7*exp(-5*(y-5)^2-5*(x-5)^2)
+    p = 0.0
     p
 end
 
