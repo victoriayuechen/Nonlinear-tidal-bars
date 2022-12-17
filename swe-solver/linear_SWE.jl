@@ -67,7 +67,7 @@ function linear_SWE(order,degree,h₀,u₀)
     udc = x -> udc(x,t)
     U = TransientTrialFESpace(V)
 
-    reffe_lg = ReferenceFE(lagrangian,Float64,order-1)
+    reffe_lg = ReferenceFE(lagrangian,Float64,order)
     Q = TestFESpace(model,reffe_lg,conformity=:L2)
     P = TransientTrialFESpace(Q)
 
