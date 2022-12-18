@@ -48,12 +48,11 @@ function linear_SWE(order,degree,h₀,u₀)
     add_tag_from_tags!(labels,"top",[3,4,6])
     add_tag_from_tags!(labels,"inside",[9])
     DC = ["left","right"]
-    BC = ["top","bottom"]
     dir = "swe-solver/output_linear_swe"
     Ω = Triangulation(model)
     dΩ = Measure(Ω,degree)
     dω = Measure(Ω,degree,ReferenceDomain())
-    Γ = BoundaryTriangulation(model,tags=BC)
+    Γ = BoundaryTriangulation(model,tags=DC)
     nΓ = get_normal_vector(Γ)
     dΓ = Measure(Γ,degree)
 
@@ -86,14 +85,14 @@ function linear_SWE(order,degree,h₀,u₀)
     un,hn = uhn
     #forcefunc(t) = VectorValue(0.0,0.0*0.5*cos(π*(1/5)*t))
 
-    res(t,(u,h),(w,ϕ)) = ∫(∂t(u)⋅w + w⋅(f*(perp∘(u))) - (∇⋅(w))*g*h + ∂t(h)*ϕ + ϕ*H*(∇⋅(u)))dΩ + ∫(g*(w⋅nΓ)*(h))dΓ
-    jac(t,(u,h),(du,dh),(w,ϕ)) = ∫(w⋅(f*(perp∘(du))) - (∇⋅(w))*g*dh + ϕ*(H*(∇⋅(du))))dΩ + ∫(g*(w⋅nΓ)*(dh))dΓ
+    res(t,(u,h),(w,ϕ)) = ∫(∂t(u)⋅w + w⋅(f*(perp∘(u))) - (∇⋅(w))*g*h + ∂t(h)*ϕ + ϕ*H*(∇⋅(u)))dΩ
+    jac(t,(u,h),(du,dh),(w,ϕ)) = ∫(w⋅(f*(perp∘(du))) - (∇⋅(w))*g*dh + ϕ*(H*(∇⋅(du))))dΩ
     jac_t(t,(u,h),(dut,dht),(w,ϕ)) = ∫(dut⋅w + dht*ϕ)dΩ
 
     op = TransientFEOperator(res,jac,jac_t,X,Y)
     nls = NLSolver(show_trace=true,linesearch=BackTracking())
-    Tend = 100
-    ode_solver = ThetaMethod(nls,1,0.5)
+    Tend = 200
+    ode_solver = ThetaMethod(nls,2,0.5)
     x = solve(ode_solver,op,uhn,0.0,Tend)
 
     if isdir(dir)
@@ -129,4 +128,4 @@ function u₀((x,y))
     u
 end
 
-linear_SWE(1,3,h₀,u₀)
+linear_SWE(0,3,h₀,u₀)
