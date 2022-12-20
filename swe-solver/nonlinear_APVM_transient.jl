@@ -113,7 +113,7 @@ function Shallow_water_theta_newton(
     if periodic
         Γ = BoundaryTriangulation(model,tags=DC)
     else
-        Γ = BoundaryTriangulation(model,tags=BC)
+        Γ = BoundaryTriangulation(model,tags=DC)
     end
     nΓ = get_normal_vector(Γ)
     dΓ = Measure(Γ,degree)
@@ -125,7 +125,7 @@ function Shallow_water_theta_newton(
         U = TransientTrialFESpace(V)
     else
         reffe_rt = ReferenceFE(raviart_thomas,Float64,order)
-        V = TestFESpace(model,reffe_rt;conformity=:HDiv,dirichlet_tags=BC)
+        V = TestFESpace(model,reffe_rt;conformity=:HDiv,dirichlet_tags=DC)
         U = TransientTrialFESpace(V)
     end
 
@@ -136,7 +136,6 @@ function Shallow_water_theta_newton(
     reffe_lgn = ReferenceFE(lagrangian, Float64, order+1)
     S = TestFESpace(model, reffe_lgn;conformity=:H1)
     R = TransientTrialFESpace(S)
-
 
     H1MM, RTMM, L2MM, H1MMchol, RTMMchol, L2MMchol = setup_and_factorize_mass_matrices(dΩ,R,S,U,V,P,Q)
 
@@ -174,13 +173,15 @@ function Shallow_water_theta_newton(
     un,hn,q,F= uhn
 
     #Forcing function on u(t)
-    forcfunc(t) = VectorValue(0.0,0.25*cos((1/5)*π*t))
+    forcfunc(t) = VectorValue(0.0,0.25*cos((1/5)*π*t))#Has to be changed correct forcing function at some point
+
+    #Norm operator
     norm(u) = meas∘(u) + 1e-14
     dnorm(u,du) = u ⋅ du / norm(u)
 
     #Define residual, jacobian in space and time
     res(t,(u,h,q,F),(w,ϕ,ϕ2,w2)) = ∫(∂t(u)⋅w + ((q-τ*(u⋅∇(q)))*(perp∘(F)))⋅w - (∇⋅(w))*(g*(h+b) + 0.5*(u⋅u)) + ∂t(h)*ϕ + w2⋅(F-u*h) + ϕ2*(q*h) +  (perp∘(∇(ϕ2)))⋅u - (ϕ2*fn) + ϕ*(∇⋅(F))- forcfunc(t)⋅w + ((cd*(norm(u))*u)/(h+b+1e-14))⋅w)dΩ + ∫((g*(h+b) + 0.5*(u⋅u))*(w⋅nΓ) + nΓ⋅(perp∘(u))*ϕ2)dΓ 
-    jac(t,(u,h,q,F),(du,dh,dq,dF),(w,ϕ,ϕ2,w2)) = ∫(((dq - τ*(u⋅∇(dq) + du⋅∇(q)))*(perp∘(F)))⋅w + ((q-τ*(u⋅∇(q)))*(perp∘(dF)))⋅w - (∇⋅(w))*(g*(dh) + (du⋅u)) + w2⋅(dF - du*h - dh*u) + ϕ2*(q*dh) + ϕ2*(dq*h) + du⋅(perp∘(∇(ϕ2))) + ϕ*(∇⋅(dF)) + (cd*(dnorm(u,du)*u)/(h+b+1e-14) + cd*(norm(u)/(h+b+1e-14)*du) + cd*(norm(u)*u*h)/((h+b+1e-14)*(h+b+1e-14)))⋅w )dΩ+ ∫((g*(dh) + (du⋅u))*(w⋅nΓ) + nΓ⋅(perp∘(du))*ϕ2)dΓ # + ((cd*2*(du⋅u)*u)/(h+b))⋅w + ((cd*(u⋅u)*du)/(h+b))⋅w
+    jac(t,(u,h,q,F),(du,dh,dq,dF),(w,ϕ,ϕ2,w2)) = ∫(((dq - τ*(u⋅∇(dq) + du⋅∇(q)))*(perp∘(F)))⋅w + ((q-τ*(u⋅∇(q)))*(perp∘(dF)))⋅w - (∇⋅(w))*(g*(dh) + (du⋅u)) + w2⋅(dF - du*h - dh*u) + ϕ2*(q*dh) + ϕ2*(dq*h) + du⋅(perp∘(∇(ϕ2))) + ϕ*(∇⋅(dF)) + (cd*(dnorm(u,du)*u)/(h+b+1e-14) + cd*(norm(u)/(h+b+1e-14)*du) + cd*(norm(u)*u*h)/((h+b+1e-14)*(h+b+1e-14)))⋅w )dΩ+ ∫((g*(dh) + (du⋅u))*(w⋅nΓ) + nΓ⋅(perp∘(du))*ϕ2)dΓ
     jac_t(t,(u,h),(dut,dht),(w,ϕ)) = ∫(dut⋅w + dht*ϕ)dΩ
 
     #Define operators and solvers
@@ -189,8 +190,7 @@ function Shallow_water_theta_newton(
     ode_solver = ThetaMethod(nls,dt,0.5)
     x = solve(ode_solver,op,uhn,T0,Tend)
 
-
-
+    #Output results
     if isdir(dir)
         output_file = paraview_collection(joinpath(dir,"nonlinear_topo"))do pvd
             pvd[0.0] = createvtk(Ω,joinpath(dir,"nonlinear_topo0.0.vtu"),cellfields=["u"=>un,"h"=>(hn+b),"b"=>b])
@@ -231,4 +231,4 @@ end
 
 
 
-Shallow_water_theta_newton(1,4,h₀,u₀,topography)
+Shallow_water_theta_newton(0,4,h₀,u₀,topography)
