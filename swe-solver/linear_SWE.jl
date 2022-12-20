@@ -38,21 +38,22 @@ function linear_SWE(order,degree,h₀,u₀)
     domain = (0,B,0,L)
     partition = (50,50)
     # Generate the model
-    model = CartesianDiscreteModel(domain,partition;isperiodic=(false,true))
+    model = GmshDiscreteModel("swe-solver/meshes/100x100periodic3.msh")
+    # model = CartesianDiscreteModel(domain,partition;isperiodic=(false,true))
 
-    #Make labels
-    labels = get_face_labeling(model)
-    add_tag_from_tags!(labels,"bottom",[1,2,5])
-    add_tag_from_tags!(labels,"left",[7])
-    add_tag_from_tags!(labels,"right",[8])
-    add_tag_from_tags!(labels,"top",[3,4,6])
-    add_tag_from_tags!(labels,"inside",[9])
+    # #Make labels
+    # labels = get_face_labeling(model)
+    # add_tag_from_tags!(labels,"bottom",[1,2,5])
+    # add_tag_from_tags!(labels,"left",[7])
+    # add_tag_from_tags!(labels,"right",[8])
+    # add_tag_from_tags!(labels,"top",[3,4,6])
+    # add_tag_from_tags!(labels,"inside",[9])
     DC = ["left","right"]
     dir = "swe-solver/output_linear_swe"
     Ω = Triangulation(model)
     dΩ = Measure(Ω,degree)
     dω = Measure(Ω,degree,ReferenceDomain())
-    Γ = BoundaryTriangulation(model,tags=DC)
+    Γ = BoundaryTriangulation(model,tags=["top","bottom"])
     nΓ = get_normal_vector(Γ)
     dΓ = Measure(Γ,degree)
 
@@ -60,8 +61,8 @@ function linear_SWE(order,degree,h₀,u₀)
 
     #Make reference spaces
 
-    reffe_rt = ReferenceFE(raviart_thomas,Float64,order)
-    V = TestFESpace(model,reffe_rt,conformity=:HDiv,dirichlet_tags=DC)
+    reffe_rt = ReferenceFE(raviart_thomas,Float64,order)#
+    V = TestFESpace(model,reffe_rt,conformity=:HDiv,dirichlet_tags=DC)#
     udc(x,t::Real) = VectorValue(0.0,0.0)
     udc = x -> udc(x,t)
     U = TransientTrialFESpace(V)
@@ -100,7 +101,7 @@ function linear_SWE(order,degree,h₀,u₀)
             pvd[0.0] = createvtk(Ω,joinpath(dir,"linear_topo0.0.vtu"),cellfields=["u"=>un,"h"=>(hn)])
             for (x,t) in x
                 u,h = x
-                pvd[t] = createvtk(Ω,joinpath(dir,"linear_topo$t.vtu"),cellfields=["u"=>u,"h"=>(h)])
+                pvd[t] = createvtk(Ω,joinpath(dir,"linear_topo$t.vtu"),cellfields=["u"=>u,"h"=>(h+H)])
                 println("done $t/$Tend")
             end
         end
@@ -110,7 +111,7 @@ function linear_SWE(order,degree,h₀,u₀)
             pvd[0.0] = createvtk(Ω,joinpath(dir,"linear_topo0.0.vtu"),cellfields=["u"=>un,"h"=>(hn)])
             for (x,t) in x
                 u,h = x
-                pvd[t] = createvtk(Ω,joinpath(dir,"linear_topo$t.vtu"),cellfields=["u"=>u,"h"=>(h)])
+                pvd[t] = createvtk(Ω,joinpath(dir,"linear_topo$t.vtu"),cellfields=["u"=>u,"h"=>(h+H)])
                 println("done $t/$Tend")
             end
         end
@@ -118,7 +119,7 @@ function linear_SWE(order,degree,h₀,u₀)
 end
 
 function h₀((x,y))
-    h = 0.05*exp(-0.01*(x-50)^2 -0.01*(y-25)^2)
+    h =0.05*exp(-0.01*(x-25)^2 -0.01*(y-25)^2)
     h
 end
 

@@ -1,4 +1,4 @@
-module APVM_solver
+
 using Pkg
 Pkg.activate(".")
 
@@ -67,11 +67,8 @@ function Gridap.get_free_dof_values(functions...)
 end
 
 
-function APVM_run(order,degree,h₀,u₀,topography,dir,periodic::Bool,Tend,dt)
+function APVM_run(order,degree,h₀,u₀,topography,forcefunc,dir,periodic::Bool,Tend,dt,domain,partition)
     #Parameters
-    B = 100
-    L = 100
-    partition = (50,50) #Split into X by X  cells
     latitude = 52 #Latitude of the model being analysed
     η = 7.29e-5
     f = 2*η*sin(latitude*(π/180))
@@ -80,25 +77,23 @@ function APVM_run(order,degree,h₀,u₀,topography,dir,periodic::Bool,Tend,dt)
     T0 = 0.0
     τ = dt*0.5
 
-    #model = GmshDiscreteModel("swe-solver/meshes/10x10periodic2.msh")
+    model = GmshDiscreteModel("swe-solver/meshes/100x100periodic2.msh")
     DC = ["left","right"]
     BC ="boundary"
     # #Make model
-    domain = (0,B,0,L)
-    if periodic
-        model = CartesianDiscreteModel(domain,partition;isperiodic=(false,true))
-    else
-        model = CartesianDiscreteModel(domain,partition)
-    end
+    # if periodic
+    #     model = CartesianDiscreteModel(domain,partition;isperiodic=(false,true))
+    # else
+    #     model = CartesianDiscreteModel(domain,partition)
+    # end
 
     #Make labels
-    labels = get_face_labeling(model)
-    add_tag_from_tags!(labels,"bottom",[1,2,5])
-    add_tag_from_tags!(labels,"left",[7])
-    add_tag_from_tags!(labels,"right",[8])
-    add_tag_from_tags!(labels,"top",[3,4,6])
-    add_tag_from_tags!(labels,"inside",[9])
-    DC = ["left","right"]
+    # labels = get_face_labeling(model)
+    # add_tag_from_tags!(labels,"bottom",[1,2,5])
+    # add_tag_from_tags!(labels,"left",[7])
+    # add_tag_from_tags!(labels,"right",[8])
+    # add_tag_from_tags!(labels,"top",[3,4,6])
+    # add_tag_from_tags!(labels,"inside",[9])
 
     #Make triangulations and boundaries
     Ω = Triangulation(model)
@@ -115,20 +110,20 @@ function APVM_run(order,degree,h₀,u₀,topography,dir,periodic::Bool,Tend,dt)
     #Make FE spaces
     if periodic
         reffe_rt = ReferenceFE(raviart_thomas,Float64,order)
-        V = TestFESpace(model,reffe_rt;conformity=:HDiv,dirichlet_tags=DC)
+        V = TestFESpace(model,reffe_rt;conformity=:HDiv,dirichlet_tags=DC)#
         U = TransientTrialFESpace(V)
     else
         reffe_rt = ReferenceFE(raviart_thomas,Float64,order)
-        V = TestFESpace(model,reffe_rt;conformity=:HDiv,dirichlet_tags=DC)
+        V = TestFESpace(model,reffe_rt;conformity=:HDiv,dirichlet_tags=DC)#
         U = TransientTrialFESpace(V)
     end
 
     reffe_lgn = ReferenceFE(lagrangian,Float64,order)
-    Q = TestFESpace(model,reffe_lgn;conformity=:L2)
+    Q = TestFESpace(model,reffe_lgn;conformity=:L2)#
     P = TransientTrialFESpace(Q)
 
     reffe_lgn = ReferenceFE(lagrangian, Float64, order+1)
-    S = TestFESpace(model, reffe_lgn;conformity=:H1)
+    S = TestFESpace(model, reffe_lgn;conformity=:H1)#
     R = TransientTrialFESpace(S)
 
     H1MM, RTMM, L2MM, H1MMchol, RTMMchol, L2MMchol = setup_and_factorize_mass_matrices(dΩ,R,S,U,V,P,Q)
@@ -167,7 +162,7 @@ function APVM_run(order,degree,h₀,u₀,topography,dir,periodic::Bool,Tend,dt)
     un,hn,q,F= uhn
 
     #Forcing function on u(t)
-    forcfunc(t) = VectorValue(0.0,0.25*cos((1/5)*π*t))#Has to be changed correct forcing function at some point
+    forcfunc(t) = x -> forcefunc(x,t)
 
     #Norm operator
     norm(u) = meas∘(u) + 1e-14
@@ -206,25 +201,59 @@ function APVM_run(order,degree,h₀,u₀,topography,dir,periodic::Bool,Tend,dt)
         end
     end
 end
+
+
+
+#Variable functions to be used to setup model, used for local tests
+function h₀((x,y))
+    hout = -topography((x,y)) +  0.5 + 0.05*exp(-0.01*(x-50)^2 -0.01*(y-25)^2)
+    hout
 end
 
+function topography((x,y))
+    p = 0.0
+    p
+end
 
-# #Variable functions to be used to setup model, used for local tests
-# function h₀((x,y))
-#     hout = -topography((x,y)) +  0.5 + 0.05*exp(-0.01*(x-50)^2 -0.01*(y-25)^2)
-#     hout
-# end
+function u₀((x,y))
+    u = VectorValue(0.0,0.0)
+    u
+end
 
-# function topography((x,y))
-#     p = 0.0
-#     p
-# end
+function forcfunc((x,y),t)
+    f = VectorValue(0.0,0.0*0.5*cos(π*(1/50)*t))
+    f
+end
 
-# function u₀((x,y))
-#     u = VectorValue(0.0,0.0)
-#     u
-# end
+outputdir = "output_swe"
+dir = "NL_SWE_APVM_test"
+if !isdir(outputdir)
+    mkdir(outputdir)
+end
 
+if !isdir(joinpath(outputdir,dir))
+    mkdir(joinpath(outputdir,dir))
+end
 
+B = 100
+L = 100
+partition = (50,50)
+domain = (0,B,0,L)
+
+#=
+Input:
+order       = order of FE polynomials
+degree      = lebesgue measure with quadruture rule of degree
+h_0         = initial fluid depth h
+u_0         = initial velocity vector field
+topography  = bottom topography, passed as a function of x and Y
+forcfunc    = The forcing function, passed as a function in x,y
+outputdir   = the output directory of all output folders
+dir         = the actual output folder NL_SWE_APVM_test
+Periodic    = if true periodic in y-dir
+Tend        = Total runtime
+dt          = Time setup
+=#
+APVM_run(0,4,h₀,u₀,topography,forcfunc,joinpath(outputdir,dir),true,100.0,1.0,domain,partition)
 
 
