@@ -3,3 +3,6 @@ output/
 *.DS_Store
 *.vtu
 *.pvd
+
+*.vtu
+*.pvd
