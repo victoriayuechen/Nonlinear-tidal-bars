@@ -96,7 +96,7 @@ function Shallow_water_theta_newton(
     
 
     reffe_rt = ReferenceFE(lagrangian,VectorValue{2,Float64},order)
-    V = TestFESpace(model,reffe_rt,dirichlet_tags=DC,dirichlet_masks=[(true,false),(true,false)])
+    V = TestFESpace(model,reffe_rt,dirichlet_tags=DC)
     udc(x,t::Real) = VectorValue(0.0,0.0)
     udc(t::Real) = x -> udc(x,t)
     U = TransientTrialFESpace(V)
@@ -134,7 +134,7 @@ function Shallow_water_theta_newton(
 
     #Forcing functions and coriolis function
     coriolis(u) = f*perp(u)
-    forcfunc(t) = VectorValue(0.0,0.5*cos((1/5)*π*t))  
+    forcfunc(t) = VectorValue(0.0,0.0*0.5*cos((1/5)*π*t))  
 
 
     res(t,(u,h,F),(w,ϕ,w2)) = ∫(∂t(u)⋅w -g*(∇⋅(w))*(b+h)  + ∂t(h)*ϕ +ϕ*(∇⋅(F)) + w2⋅(F - u*h)-forcfunc(t)⋅w + (coriolis∘u)⋅w)dΩ
@@ -147,23 +147,23 @@ function Shallow_water_theta_newton(
     Tend = 10
     ode_solver = ThetaMethod(nls,0.1,0.5)
     x = solve(ode_solver,op,uhn,0.0,Tend)
-    dir = "swe-solver/1d-topo-output_zero"
+    dir = "swe-solver/linear_drop"
     if isdir(dir)
-        output_file = paraview_collection(joinpath(dir,"1d-topo-output"))do pvd
-            #pvd[0.0] = createvtk(Ω,joinpath(dir,"1d-topo0.0.vtu"),cellfields=["u"=>un,"h"=>(hn+b),"b"=>b])
+        output_file = paraview_collection(joinpath(dir,"linear_topo"))do pvd
+            pvd[0.0] = createvtk(Ω,joinpath(dir,"linear_topo0.0.vtu"),cellfields=["u"=>un,"h"=>(hn+b),"b"=>b])
             for (x,t) in x
                 u,h,F = x
-                pvd[t] = createvtk(Ω,joinpath(dir,"1d-topo$t.vtu"),cellfields=["u"=>u,"h"=>(h+b),"b"=>b])
+                pvd[t] = createvtk(Ω,joinpath(dir,"linear_topo$t.vtu"),cellfields=["u"=>u,"h"=>(h+b),"b"=>b])
                 println("done $t/$Tend")
             end
         end
     else
         mkdir(dir)
-        output_file = paraview_collection(joinpath(dir,"1d-topo-output")) do pvd
-            #pvd[0.0] = createvtk(Ω,joinpath(dir,"1d-topo0.0.vtu"),cellfields=["u"=>un,"h"=>(hn+b),"b"=>b])
+        output_file = paraview_collection(joinpath(dir,"linear_topo")) do pvd
+            pvd[0.0] = createvtk(Ω,joinpath(dir,"linear_topo0.0.vtu"),cellfields=["u"=>un,"h"=>(hn+b),"b"=>b])
             for (x,t) in x
                 u,h,F = x
-                pvd[t] = createvtk(Ω,joinpath(dir,"1d-topo$t.vtu"),cellfields=["u"=>u,"h"=>(h+b),"b"=>b])
+                pvd[t] = createvtk(Ω,joinpath(dir,"linear_topo$t.vtu"),cellfields=["u"=>u,"h"=>(h+b),"b"=>b])
                 println("done $t/$Tend")
             end
         end
@@ -171,7 +171,7 @@ function Shallow_water_theta_newton(
 end
 
 function h₀((x,y))
-    h = -topography((x,y)) +  1 + 1*exp(-1*(x-5)^2 -1*(y-1)^2)
+    h = -topography((x,y)) +  2 + 1*exp(-1*(x-5)^2 -1*(y-2.5)^2)
     h
 end
 

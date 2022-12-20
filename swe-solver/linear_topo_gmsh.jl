@@ -64,8 +64,8 @@ function Shallow_water_theta_newton(
         sparse_matrix_type::Type{<:AbstractSparseMatrix}=SparseMatrixCSC{Float64,Int})
 
     # Generate the model
-    modelfile = "swe-solver/meshes/periodic_mesh_test.msh"
-    generate_rectangle_mesh(10.0, 10.0, modelfile, "rectangle", 0.1)
+    modelfile = "swe-solver/meshes/10x10periodic.msh"
+    # generate_rectangle_mesh(10.0, 10.0, modelfile, "rectangle", 0.1)
     #Create model
     dir = "swe-solver/output_linear_swe"
     model = GmshDiscreteModel(modelfile)
@@ -80,12 +80,12 @@ function Shallow_water_theta_newton(
     dΓ = Measure(Γ,degree)
     
 
-    reffe_rt = ReferenceFE(lagrangian,VectorValue{2,Float64},order)
-    V = TestFESpace(model,reffe_rt)
+    reffe_rt = ReferenceFE(raviart_thomas,Float64,order)
+    V = TestFESpace(model,reffe_rt;conformity=:HDiv,dirichlet_tags=DC)
     U = TransientTrialFESpace(V)
 
     reffe_lgn = ReferenceFE(lagrangian,Float64,order)
-    Q = TestFESpace(model,reffe_lgn)
+    Q = TestFESpace(model,reffe_lgn;conformity=:H1)
     P = TransientTrialFESpace(Q)
 
 
@@ -153,7 +153,7 @@ function Shallow_water_theta_newton(
 end
 
 function h₀((x,y))
-    h = -topography((x,y)) +  1  #+ 0.1*exp(-100*(x-0.5)^2 -100*(y-0.25)^2)
+    h = -topography((x,y)) +  1  + 0.1*exp(-100*(x-5)^2 -100*(y-2.5)^2)
     h
 end
 

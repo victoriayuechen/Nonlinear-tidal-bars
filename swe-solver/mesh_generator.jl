@@ -14,7 +14,7 @@ Parameters:
     lc: The size of the triangles, default is 1e-2. 
 Creates a <filename>.msh in the meshes folder.
 """
-function generate_rectangle_mesh(Lx::Float64, Ly::Float64, filename::String, modelname::String, lc::Float64)
+function generate_rectangle_mesh(Lx::Float64, Ly::Float64, filename::String, modelname::String, lc::Float64, periodic::Bool)
     # Initialise mesh generator 
     gmsh.initialize()
     gmsh.model.add(modelname)
@@ -35,7 +35,9 @@ function generate_rectangle_mesh(Lx::Float64, Ly::Float64, filename::String, mod
     gmsh.model.geo.addPlaneSurface([1], 1)
 
     gmsh.model.geo.synchronize()
-    gmsh.model.mesh.setPeriodic(1, [3], [1], [1, 0, 0, 0, 0, 1, Ly, 0, 0, 0, 1, 0, 0, 0, 0, 1])
+    if periodic
+        gmsh.model.mesh.setPeriodic(1, [3], [1], [1, 0, 0, 0, 0, 1, Ly, 0, 0, 0, 1, 0, 0, 0, 0, 1])
+    end
 
     gmsh.model.addPhysicalGroup(0, [1, 2], 1, "bottom")
     gmsh.model.addPhysicalGroup(0, [3, 4], 2, "top")
