@@ -1,73 +1,4 @@
-using Pkg
-Pkg.activate(".")
-
-using Gridap
-using SparseMatricesCSR
-using SparseArrays
-using WriteVTK
-using LinearAlgebra
-using LineSearches: BackTracking
-using GridapGmsh
-using Gridap.TensorValues: meas
-#Solves nonlinear shallow water equations on a 2d plane
-#Makes use of the Anticipated Potential Vorticity Method (APVM) produced by McRae and Cotter: https://doi.org/10.1002/qj.2291 
-#Implementation in Gridap for this 2D domain also uses similar code produced by the Gridap GeoSciences github: https://github.com/gridapapps/GridapGeosciences.jl
-
-
-function uh(u₀,h₀,F₀,q₀,X,Y,dΩ)
-    a((u,h,r,u2),(w,ϕ,ϕ2,w2)) = ∫(w⋅u + ϕ*h + w2⋅u2 + ϕ2*r)dΩ
-    b((w,ϕ,ϕ2,w2)) = ∫(w⋅u₀ + ϕ*h₀ + w2⋅F₀ + q₀*ϕ2)dΩ
-    solve(AffineFEOperator(a,b,X,Y))
-end
-
-function compute_mass_flux!(F,dΩ,V,RTMMchol,u)
-    b(v) = ∫(v⋅u)dΩ
-    Gridap.FESpaces.assemble_vector!(b, get_free_dof_values(F), V)
-    ldiv!(RTMMchol,get_free_dof_values(F))
-end
-
-function compute_potential_vorticity!(q,H1h,H1hchol,dΩ,R,S,h,u,f)
-    a(r,s) = ∫(s*h*r)dΩ
-    c(s)   = ∫(perp∘(∇(s))⋅(u) + s*f)dΩ
-    Gridap.FESpaces.assemble_matrix_and_vector!(a, c, H1h, get_free_dof_values(q), R, S)
-    lu!(H1hchol, H1h)
-    ldiv!(H1hchol, get_free_dof_values(q))
-end
-
-clone_fe_function(space,f)=FEFunction(space,copy(get_free_dof_values(f)))
-
-function setup_and_factorize_mass_matrices(dΩ, R, S, U, V, P, Q)
-    amm(a,b) = ∫(a⋅b)dΩ
-    H1MM = assemble_matrix(amm, R, S)
-    RTMM = assemble_matrix(amm, U, V)
-    L2MM = assemble_matrix(amm, P, Q)
-    H1MMchol = lu(H1MM)
-    RTMMchol = lu(RTMM)
-    L2MMchol = lu(L2MM)
-  
-    H1MM, RTMM, L2MM, H1MMchol, RTMMchol, L2MMchol
-  end
-
-function new_vtk_step(Ω,file,_cellfields)
-    n = size(_cellfields)[1]
-    createvtk(Ω,
-              file,
-              cellfields=_cellfields,
-              nsubcells=n)
-end
-
-#Perpendicular operator
-perp(u) = VectorValue(-u[2],u[1])
-
-function Gridap.get_free_dof_values(functions...)
-    map(get_free_dof_values,functions)
-  end
-
-
-function Shallow_water_theta_newton(
-        order,degree,h₀,u₀,topography)
-
-
+function APVM_run(order,degree,h₀,u₀,topography,dir,periodic::Bool,Tend,dt)
     #Parameters
     B = 100
     L = 100
@@ -77,15 +8,9 @@ function Shallow_water_theta_newton(
     f = 2*η*sin(latitude*(π/180))
     cd = 0.025
     g = 9.81
-    periodic=true
     T0 = 0.0
-    Tend = 100
-    dt = 1
     τ = dt*0.5
 
-    
-    #Save directory of output files
-    dir = "swe-solver/APVM_drop"
     #model = GmshDiscreteModel("swe-solver/meshes/10x10periodic2.msh")
     DC = ["left","right"]
     BC ="boundary"
@@ -212,23 +137,21 @@ function Shallow_water_theta_newton(
         end
     end
 end
-
-#Variable functions to be used to setup model
-function h₀((x,y))
-    hout = -topography((x,y)) +  0.5 + 0.05*exp(-0.01*(x-50)^2 -0.01*(y-25)^2)
-    hout
-end
-
-function topography((x,y))
-    p = 0.0
-    p
-end
-
-function u₀((x,y))
-    u = VectorValue(0.0,0.0)
-    u
 end
 
 
+# #Variable functions to be used to setup model, used for local tests
+# function h₀((x,y))
+#     hout = -topography((x,y)) +  0.5 + 0.05*exp(-0.01*(x-50)^2 -0.01*(y-25)^2)
+#     hout
+# end
 
-Shallow_water_theta_newton(0,4,h₀,u₀,topography)
+# function topography((x,y))
+#     p = 0.0
+#     p
+# end
+
+# function u₀((x,y))
+#     u = VectorValue(0.0,0.0)
+#     u
+# end
