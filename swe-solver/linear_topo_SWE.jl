@@ -22,7 +22,7 @@ function uh(u₀,h₀,X,Y,dΩ)
 end
 
 
-function linear_SWE(order,degree,h₀,u₀)
+function linear_SWE(order,degree,h₀,u₀,topography)
 
     #Parameters
     B = 100 #Channel width
@@ -48,7 +48,7 @@ function linear_SWE(order,degree,h₀,u₀)
     add_tag_from_tags!(labels,"top",[3,4,6])
     add_tag_from_tags!(labels,"inside",[9])
     DC = ["left","right"]
-    dir = "swe-solver/output_linear_swe"
+    dir = "swe-solver/output_linear_topo_swe"
     Ω = Triangulation(model)
     dΩ = Measure(Ω,degree)
     dω = Measure(Ω,degree,ReferenceDomain())
@@ -81,12 +81,16 @@ function linear_SWE(order,degree,h₀,u₀)
     l2(v) = ∫(v*h₀)dΩ
     hn = solve(AffineFEOperator(a2,l2,P,Q))
 
+    a3(u,v) = ∫(v*u)dΩ
+    l3(v) = ∫(v*topography)dΩ
+    b = solve(AffineFEOperator(a3,l3,P,Q))
+
     uhn = uh(un,hn,X,Y,dΩ)
     un,hn = uhn
     #forcefunc(t) = VectorValue(0.0,0.0*0.5*cos(π*(1/5)*t))
 
-    res(t,(u,h),(w,ϕ)) = ∫(∂t(u)⋅w + w⋅(f*(perp∘(u))) - (∇⋅(w))*g*h + ∂t(h)*ϕ + ϕ*H*(∇⋅(u)))dΩ
-    jac(t,(u,h),(du,dh),(w,ϕ)) = ∫(w⋅(f*(perp∘(du))) - (∇⋅(w))*g*dh + ϕ*(H*(∇⋅(du))))dΩ
+    res(t,(u,h),(w,ϕ)) = ∫(∂t(u)⋅w + w⋅(f*(perp∘(u))) - (∇⋅(w))*g*h + ∂t(h)*ϕ + ϕ*(H-b)*(∇⋅(u))- ∇(b)⋅u)dΩ
+    jac(t,(u,h),(du,dh),(w,ϕ)) = ∫(w⋅(f*(perp∘(du))) - (∇⋅(w))*g*dh + ϕ*((H-b)*(∇⋅(du))) - ∇(b)⋅u)dΩ
     jac_t(t,(u,h),(dut,dht),(w,ϕ)) = ∫(dut⋅w + dht*ϕ)dΩ
 
     op = TransientFEOperator(res,jac,jac_t,X,Y)
@@ -128,4 +132,9 @@ function u₀((x,y))
     u
 end
 
-linear_SWE(0,3,h₀,u₀)
+function topography((x,y))
+    b = 0.4*exp(-0.01*(y-50)^2)
+    b
+end
+
+linear_SWE(0,3,h₀,u₀,topography)
