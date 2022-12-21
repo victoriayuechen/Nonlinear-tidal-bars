@@ -1,5 +1,4 @@
 module MyMeshGenerator
-
 using Gmsh: gmsh
 
 export generate_rectangle_mesh
@@ -66,7 +65,6 @@ function generate_rectangle_mesh(Lx::Float32, Ly::Float32, filename::String, mod
     gmsh.finalize()
 end 
 end
-
 
 
 

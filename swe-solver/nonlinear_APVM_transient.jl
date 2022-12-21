@@ -77,10 +77,10 @@ function APVM_run(order,degree,h₀,u₀,topography,forcefunc,dir,periodic::Bool
     T0 = 0.0
     τ = dt*0.5
 
-    model = GmshDiscreteModel("swe-solver/meshes/100x100periodic2.msh")
+    model = GmshDiscreteModel("swe-solver/meshes/100x100periodic4.msh")
     DC = ["left","right"]
     BC ="boundary"
-    # #Make model
+    #Make model
     # if periodic
     #     model = CartesianDiscreteModel(domain,partition;isperiodic=(false,true))
     # else
@@ -109,7 +109,7 @@ function APVM_run(order,degree,h₀,u₀,topography,forcefunc,dir,periodic::Bool
     
     #Make FE spaces
     if periodic
-        reffe_rt = ReferenceFE(raviart_thomas,Float64,order)
+        reffe_rt = ReferenceFE(raviart_thomas,Float64,order)#
         V = TestFESpace(model,reffe_rt;conformity=:HDiv,dirichlet_tags=DC)#
         U = TransientTrialFESpace(V)
     else
@@ -150,7 +150,7 @@ function APVM_run(order,degree,h₀,u₀,topography,forcefunc,dir,periodic::Bool
     fn=solve(AffineFEOperator(a4,l4,R,S))
 
     #Build and compute initial potential vorticity
-    q₀ = clone_fe_function(P,fn)
+    q₀ = clone_fe_function(R,fn)
     compute_potential_vorticity!(q₀,H1MM,H1MMchol,dΩ,R,S,hn,un,fn)
 
     #Build and compute initial mass flux

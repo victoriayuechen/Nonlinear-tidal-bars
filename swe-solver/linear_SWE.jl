@@ -38,16 +38,16 @@ function linear_SWE(order,degree,h₀,u₀)
     domain = (0,B,0,L)
     partition = (50,50)
     # Generate the model
-    model = GmshDiscreteModel("swe-solver/meshes/100x100periodic2.msh")
-    # model = CartesianDiscreteModel(domain,partition;isperiodic=(false,true))
+    # model = GmshDiscreteModel("swe-solver/meshes/100x100periodic2.msh")
+    model = CartesianDiscreteModel(domain,partition;isperiodic=(false,true))
 
     # #Make labels
-    # labels = get_face_labeling(model)
-    # add_tag_from_tags!(labels,"bottom",[1,2,5])
-    # add_tag_from_tags!(labels,"left",[7])
-    # add_tag_from_tags!(labels,"right",[8])
-    # add_tag_from_tags!(labels,"top",[3,4,6])
-    # add_tag_from_tags!(labels,"inside",[9])
+    labels = get_face_labeling(model)
+    add_tag_from_tags!(labels,"bottom",[1,2,5])
+    add_tag_from_tags!(labels,"left",[7])
+    add_tag_from_tags!(labels,"right",[8])
+    add_tag_from_tags!(labels,"top",[3,4,6])
+    add_tag_from_tags!(labels,"inside",[9])
     DC = ["left","right"]
     dir = "swe-solver/output_linear_swe"
     Ω = Triangulation(model)
