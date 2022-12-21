@@ -135,9 +135,15 @@ function Shallow_water_equations_newton_solver(
     func_boun(t,(u,ζ),(w,ϕ)) = g*(ζ)*(w⋅nΓ)
     dfunc_boun(t,(u,ζ),(du,dζ),(w,ϕ)) = g*(dζ)*(w⋅nΓ)
 
-    #Stabilization functions
-    func_stab(t,(u,ζ),(w,ϕ)) = α*(∇(ζ)⋅∇(ϕ)) + ν * (∇⋅u)*(∇⋅w)
-    dfunc_stab(t,(u,ζ),(du,dζ),(w,ϕ)) = α*(∇(dζ)⋅∇(ϕ)) + ν * (∇⋅du)*(∇⋅w)
+    #Stabilization function ζ
+    func_stabζ(t,(u,ζ),(w,ϕ)) = α*(∇(ζ)⋅∇(ϕ))                                               
+    dfunc_stabζ(t,(u,ζ),(du,dζ),(w,ϕ)) = α*(∇(dζ)⋅∇(ϕ))                                   
+
+
+    #Stabilization function u
+    func_stabu(t,(u,ζ),(w,ϕ)) = ν * (∇⋅u)*(∇⋅w)                          
+    dfunc_stabu(t,(u,ζ),(du,dζ),(w,ϕ)) = ν * (∇⋅du)*(∇⋅w)
+
 
 
     ##''''''''''''''Residual''''''''''''''##
@@ -150,7 +156,8 @@ function Shallow_water_equations_newton_solver(
         func_Fₚ(t,(u,ζ),(w,ϕ))  +                                       #Forcing function
         func_ζt(t,(u,ζ),(w,ϕ))  +                                       #ζ change
         func_h(t,(u,ζ),(w,ϕ))   +                                       #ζ+Velocity function
-        func_stab(t,(u,ζ),(w,ϕ)))dΩ +                                   #Stabilization
+        func_stabζ(t,(u,ζ),(w,ϕ)) +                                     #Stabilization ζ
+        func_stabu(t,(u,ζ),(w,ϕ)))dΩ +                                  #Stabilization u
         ∫(func_boun(t,(u,ζ),(w,ϕ)))dΓ                                   #Boundary
 
     ##''''''''''''''Jacobian''''''''''''''##
@@ -159,7 +166,8 @@ function Shallow_water_equations_newton_solver(
         dfunc_cD(t,(u,ζ),(du,dζ),(w,ϕ))  +                              #Drag coefficient term
         dfunc_g(t,(u,ζ),(du,dζ),(w,ϕ))   +                              #Gravitational
         dfunc_h(t,(u,ζ),(du,dζ),(w,ϕ))   +                              #ζ+Velocity function
-        dfunc_stab(t,(u,ζ),(du,dζ),(w,ϕ)))dΩ +                          #Stabilization
+        dfunc_stabζ(t,(u,ζ),(du,dζ),(w,ϕ)) +                             #Stabilization ζ
+        dfunc_stabu(t,(u,ζ),(du,dζ),(w,ϕ)))dΩ +                         #Stabilization u
         ∫(dfunc_boun(t,(u,ζ),(du,dζ),(w,ϕ)))dΓ                          #Boundary
 
     ##''''''''''''''Jacobian for t''''''''''''''##
