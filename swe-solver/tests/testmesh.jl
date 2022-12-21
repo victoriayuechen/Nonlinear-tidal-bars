@@ -1,8 +1,8 @@
 using Revise
-include("../mesh_generator.jl")
+includet("../mesh_generator.jl")
 using .MyMeshGenerator
 
 
-generate_rectangle_mesh(100.0, 100.0, "100x100periodic2.msh", "rectangle", 2.0,true)
+generate_rectangle_mesh(Float32(100), Float32(100), "100x100periodic2.msh", "rectangle", Float32(2),false)
 
 # Small test for whether the mesh generator works 

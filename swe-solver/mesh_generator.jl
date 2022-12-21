@@ -1,4 +1,4 @@
-module MyMeshGenerator 
+module MyMeshGenerator
 
 using Gmsh: gmsh
 
@@ -36,9 +36,21 @@ function generate_rectangle_mesh(Lx::Float32, Ly::Float32, filename::String, mod
     gmsh.model.geo.addPlaneSurface([1], 1)
 
     gmsh.model.geo.synchronize()
+
+
     if periodic
-        gmsh.model.mesh.setPeriodic(1, [1], [3], [1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
+        transformation_matrix = zeros(4, 4)
+        transformation_matrix[1, 1] = 1
+        transformation_matrix[2, 2] = 1 
+        transformation_matrix[2,4] = -Ly
+        transformation_matrix[3, 3] = 1
+        transformation_matrix[4, 4] = 1
+        transformation_matrix = vec(transformation_matrix')
+
+        gmsh.model.mesh.set_periodic(1, [1], [3], transformation_matrix)
     end
+
+
 
     gmsh.model.addPhysicalGroup(0, [1, 2], 1, "bottom")
     gmsh.model.addPhysicalGroup(0, [3, 4], 2, "top")
@@ -53,7 +65,8 @@ function generate_rectangle_mesh(Lx::Float32, Ly::Float32, filename::String, mod
 
     gmsh.finalize()
 end 
-generate_rectangle_mesh(Float32(100), Float32(100), "swe-solver/meshes/100x100periodic2.msh", "rectangle", Float32(2),true)
 end
+
+
 
 

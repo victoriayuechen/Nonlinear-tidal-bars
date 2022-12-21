@@ -4,7 +4,7 @@ Pkg.activate(".")
 using Gridap
 using WriteVTK
 using LineSearches: BackTracking
-# using GridapGmsh
+using GridapGmsh
 # include("mesh_generator.jl")
 # using .MyMeshGenerator
 
@@ -38,7 +38,7 @@ function linear_SWE(order,degree,h₀,u₀)
     domain = (0,B,0,L)
     partition = (50,50)
     # Generate the model
-    model = GmshDiscreteModel("swe-solver/meshes/100x100periodic3.msh")
+    model = GmshDiscreteModel("swe-solver/meshes/100x100periodic2.msh")
     # model = CartesianDiscreteModel(domain,partition;isperiodic=(false,true))
 
     # #Make labels
