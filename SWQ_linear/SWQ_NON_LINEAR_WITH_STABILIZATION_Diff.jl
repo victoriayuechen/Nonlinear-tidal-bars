@@ -22,7 +22,7 @@ using Gridap.TensorValues: meas
 function Shallow_water_equations_newton_solver(
         order,degree,Tend,dt,B,L,x_points,y_points,dir)
 
-    #Parameters from Hepkema
+    #''''''''''''''Parameters from Hepkema''''''''''''''##
     latitude = 52                           #latitude                               (°)
     η = 7.29e-5                             #angular speed of Earth rotation        (s^(-1))
     f = 2*η*sin(latitude*(π/180))           #coriolis parameter                     (s^(-1))
@@ -32,22 +32,22 @@ function Shallow_water_equations_newton_solver(
     σ = 2*pi/44700                          #Tidal frequency                        (s^(-1))
     cD = 0.0025                             #Drag coefficient                       ()
 
-    #Stabilization Parameters
+    ##''''''''''''''Stabilization Parameters''''''''''''''##
     α = 1e-6                                #Based on ν
     ν = 1e-6                                #From Anna Louka
 
-    #Functions 
+    ##''''''''''''''Functions''''''''''''''##
     coriolis(u) = f*VectorValue(u[2],-u[1])                                                                             #coriolis
     forcfunc(t) = VectorValue(-f*U_start*cos(σ*t),-σ*U_start*sin(σ*t)+cD*abs(U_start*cos(σ*t))*U_start*cos(σ*t)/H)      #Fₚ from Hepkema
 
-    #Make model
+    #''''''''''''''Make model''''''''''''''##
     domain = (0,B,0,L)                      #Original x and y flipped
     partition = (x_points,y_points)         #Partition
 
-    # Generate the model
+    ##''''''''''''''Generate the model''''''''''''''##
     model = CartesianDiscreteModel(domain,partition;isperiodic=(false,true))  #Periodic on y-axis
 
-    #Make labels
+    ##''''''''''''''Make labels''''''''''''''##
     labels = get_face_labeling(model)
     add_tag_from_tags!(labels,"bottom",[1,2,5])
     add_tag_from_tags!(labels,"left",[7])
@@ -56,14 +56,14 @@ function Shallow_water_equations_newton_solver(
     add_tag_from_tags!(labels,"inside",[9])
     DC = ["left","right"]
     
-    #Define triangulation
+    ##''''''''''''''Define triangulation''''''''''''''##
     Ω = Triangulation(model)
     dΩ = Measure(Ω,degree)
     Γ = BoundaryTriangulation(model,tags=DC)
     nΓ = get_normal_vector(Γ)
     dΓ = Measure(Γ,degree)
 
-    #Define function spaces
+    ##''''''''''''''Define function spaces''''''''''''''##
     v_boundary(x) = VectorValue(0.0,0.0)
     reffe_rt = ReferenceFE(lagrangian,VectorValue{2,Float64},order)
     V = TestFESpace(model,reffe_rt,dirichlet_tags=DC,dirichlet_masks=[(true,false),(true,false)])  #Zero at the x-boundaries
@@ -76,12 +76,12 @@ function Shallow_water_equations_newton_solver(
     Y = MultiFieldFESpace([V,Q])  #u, ζ
     X = TransientMultiFieldFESpace([U,P])
 
-    #Initial solution of ζ
+    ##''''''''''''''Initial solution of ζ''''''''''''''##
     #ζ₀(x,t) = 0.05*exp(-0.01*(x[1]-50)^2 - 0.01*(x[2]-25)^2)           #Druppel
     ζ₀(x,t) = 0.0                                                       #Hepkema original initial solution
     ζ₀(t::Real) = x->ζ₀(x,t)
 
-    #Initial solution of u
+    ##''''''''''''''Initial solution of u''''''''''''''##
     #u₀(x,t) = VectorValue(0.0,0.0)                                     #Hepkema original initial solution
     u₀(x,t) = VectorValue(0.0,U_start)                                  #Maybe better initial solution
     u₀(t::Real) = x->u₀(x,t)
@@ -90,8 +90,7 @@ function Shallow_water_equations_newton_solver(
     uhn = interpolate_everywhere([u₀(0.0),ζ₀(0.0)],X(0.0))
 
 
-    #Define bottom topography
-
+    ##''''''''''''''Define bottom topography''''''''''''''##
     #h₀(x,t) = 0.4*exp(-0.01*(x[2]-50)^2)                               #Druppel
     #h₀(x,t) = 0.0                                                      #No bottom topography
     #Different vertical bottoms:
@@ -102,32 +101,80 @@ function Shallow_water_equations_newton_solver(
     h = interpolate_everywhere(h₀(0.0),P(0.0))
     
 
+    ##''''''''''Different functions with their derivitave''''''''##
+    #Velocity change 
+    func_ut(t,(u,ζ),(w,ϕ)) =  ∂t(u)⋅w
+
+    #Convection
+    func_con(t,(u,ζ),(w,ϕ)) = ∇(u)'⋅u⋅w
+    dfunc_con(t,(u,ζ),(du,dζ),(w,ϕ)) = ∇(du)'⋅u⋅w + ∇(u)'⋅du⋅w
+
+    #Coriolis
+    func_cor(t,(u,ζ),(w,ϕ)) = (coriolis∘u)⋅w
+    dfunc_cor(t,(u,ζ),(du,dζ),(w,ϕ)) = (coriolis∘du)⋅w
+
+    #Drag coefficient term
+    func_cD(t,(u,ζ),(w,ϕ)) = cD* (meas∘u) * u⋅w/(ζ+H-h)
+    dfunc_cD(t,(u,ζ),(du,dζ),(w,ϕ)) = cD*(meas∘u)*u*dζ⋅w/((ζ+H-h)*(ζ+H-h))+cD*u⋅du*u⋅w/((meas∘(u+1e-14))*(ζ+H-h)) + cD*(meas∘u)*du⋅w/(ζ+H-h)
+
+    #Gravitational (without boundary)
+    func_g(t,(u,ζ),(w,ϕ)) = - g*(∇⋅(w))*ζ
+    dfunc_g(t,(u,ζ),(du,dζ),(w,ϕ)) = -g*(∇⋅(w))*dζ
+
+    #Forcing function
+    func_Fₚ(t,(u,ζ),(w,ϕ)) = - forcfunc(t)⋅w
+
+    #ζ change
+    func_ζt(t,(u,ζ),(w,ϕ)) = ∂t(ζ)*ϕ
+
+    #ζ+Velocity function
+    func_h(t,(u,ζ),(w,ϕ)) = -(ζ+H-h)*u ⋅(∇(ϕ))
+    dfunc_h(t,(u,ζ),(du,dζ),(w,ϕ)) = - (dζ*u+(ζ+H-h)*u) ⋅(∇(ϕ))
+
+    #Boundary
+    func_boun(t,(u,ζ),(w,ϕ)) = g*(ζ)*(w⋅nΓ)
+    dfunc_boun(t,(u,ζ),(du,dζ),(w,ϕ)) = g*(dζ)*(w⋅nΓ)
+
+    #Stabilization functions
+    func_stab(t,(u,ζ),(w,ϕ)) = α*(∇(ζ)⋅∇(ϕ)) + ν * (∇⋅u)*(∇⋅w)
+    dfunc_stab(t,(u,ζ),(du,dζ),(w,ϕ)) = α*(∇(dζ)⋅∇(ϕ)) + ν * (∇⋅du)*(∇⋅w)
 
 
-
-    #Residual 
+    ##''''''''''''''Residual''''''''''''''##
     #Added a Stabilization term inside the residual following E. Hanert et al. / Ocean Modelling 5 (2002) 17–35
-    res(t,(u,ζ),(w,ϕ)) = ∫(∂t(u)⋅w - g*(∇⋅(w))*ζ+ ∇(u)'⋅u⋅w - forcfunc(t)⋅w + (coriolis∘u)⋅w + cD* (meas∘u) * u⋅w/(ζ+H-h)+∂t(ζ)*ϕ-(ζ+H-h)*u ⋅(∇(ϕ)) + α*(∇(ζ)⋅∇(ϕ)) + ν * (∇⋅u)*(∇⋅w)  )dΩ + ∫(g*(ζ)*(w⋅nΓ))dΓ 
+    res(t,(u,ζ),(w,ϕ)) = ∫(func_ut(t,(u,ζ),(w,ϕ)) +                     #Velocity change
+        func_con(t,(u,ζ),(w,ϕ)) +                                       #Convection
+        func_cor(t,(u,ζ),(w,ϕ)) +                                       #Coriolis
+        func_cD(t,(u,ζ),(w,ϕ))  +                                       #Drag coefficient term
+        func_g(t,(u,ζ),(w,ϕ))   +                                       #Gravitational
+        func_Fₚ(t,(u,ζ),(w,ϕ))  +                                       #Forcing function
+        func_ζt(t,(u,ζ),(w,ϕ))  +                                       #ζ change
+        func_h(t,(u,ζ),(w,ϕ))   +                                       #ζ+Velocity function
+        func_stab(t,(u,ζ),(w,ϕ)))dΩ +                                   #Stabilization
+        ∫(func_boun(t,(u,ζ),(w,ϕ)))dΓ                                   #Boundary
 
-    #Jacobian
-    jac(t,(u,ζ),(du,dζ),(w,ϕ)) = ∫(-g*(∇⋅(w))*dζ + ∇(du)'⋅u⋅w + ∇(u)'⋅du⋅w + (coriolis∘du)⋅w +cD*(meas∘u)*u*dζ⋅w/((ζ+H-h)*(ζ+H-h))+cD*u⋅du*u⋅w/((meas∘(u+1e-14))*(ζ+H-h)) + cD*(meas∘u)*du⋅w/(ζ+H-h) - (dζ*u+(ζ+H-h)*u) ⋅(∇(ϕ)) +α*(∇(dζ)⋅∇(ϕ)) + ν * (∇⋅du)*(∇⋅w) )dΩ + ∫(g*dζ*(w⋅nΓ))dΓ
+    ##''''''''''''''Jacobian''''''''''''''##
+    jac(t,(u,ζ),(du,dζ),(w,ϕ)) = ∫(dfunc_con(t,(u,ζ),(du,dζ),(w,ϕ)) +   #Convection
+        dfunc_cor(t,(u,ζ),(du,dζ),(w,ϕ)) +                              #Coriolis
+        dfunc_cD(t,(u,ζ),(du,dζ),(w,ϕ))  +                              #Drag coefficient term
+        dfunc_g(t,(u,ζ),(du,dζ),(w,ϕ))   +                              #Gravitational
+        dfunc_h(t,(u,ζ),(du,dζ),(w,ϕ))   +                              #ζ+Velocity function
+        dfunc_stab(t,(u,ζ),(du,dζ),(w,ϕ)))dΩ +                          #Stabilization
+        ∫(dfunc_boun(t,(u,ζ),(du,dζ),(w,ϕ)))dΓ                          #Boundary
 
-    #Jacobian for t
+    ##''''''''''''''Jacobian for t''''''''''''''##
     jac_t(t,(u,ζ),(dut,dζt),(w,ϕ)) = ∫(dut⋅w + dζt*ϕ)dΩ
 
-
-
-    #Solver with ThetaMethod
+    ##''''''''''''''Solver with ThetaMethod''''''''''''''##
     op = TransientFEOperator(res,jac,jac_t,X,Y)
     nls = NLSolver(show_trace=true,linesearch=BackTracking())
     ode_solver = ThetaMethod(nls,dt,0.5)
-    x = solve(ode_solver,op,uhn,0.0,Tend)  
+    x = solve(ode_solver,op,uhn,0.0,Tend)  # --> Replace Used GridAp ThetaMethod by DifferentialPackage
 
 
-    #Saving
+    #''''''''''''''Saving''''''''''''''##
     if isdir(dir)
         output_file = paraview_collection(joinpath(dir,"1d-topo-output"))do pvd
-            u,ζ = uhn
             for (x,t) in x
                 u,ζ = x
                 pvd[t] = createvtk(Ω,joinpath(dir,"1d-topo$t.vtu"),cellfields=["u"=>u,"ζ"=>ζ,"h"=>h])
@@ -137,7 +184,6 @@ function Shallow_water_equations_newton_solver(
     else
         mkdir(dir)
         output_file = paraview_collection(joinpath(dir,"1d-topo-output")) do pvd
-            u,ζ = uhn
             for (x,t) in x
                 u,ζ = x
                 pvd[t] = createvtk(Ω,joinpath(dir,"1d-topo$t.vtu"),cellfields=["u"=>u,"ζ"=>ζ,"h"=>h])
@@ -147,29 +193,29 @@ function Shallow_water_equations_newton_solver(
     end
 end
 
-#Variable parameters
+##''''''''''''''Variable parameters''''''''''''''##
 order = 1               #Order of the spaces
 degree = 3              #Degree for the boundaries
-Tend = 500              #The total time
-dt = 5                  #Time step
+Tend = 500              #The total time                              (s)
+dt = 5                  #Time step                                   (s)
 B = 1000                #Channel width                               (m)
 L = 10000               #Channel length                              (m)
 x_points = 20           #Amount of points in the x-direction -> dx = 50 m
 y_points = 100          #Amount of points in the y-direction -> dy = 100 m
 dir = "./RESULTSSL"     #Name of the direction the files get savid in
 
-#=
-Shallow_water_equations_newton_solver input:
-order                   Order of the spaces
-degree                  Degree for the boundaries
-Tend                    The total time
-dt                      Time step 
-B                       Channel width
-L                       Channel length
-x_points                Amount of points in the x-direction
-y_points                Amount of points in the y-direction
-dir                     Name of the direction the files get savid in
-=#
+    #=
+##''''''''''''''Shallow_water_equations_newton_solver input''''''''''''''##
+    order                   Order of the spaces
+    degree                  Degree for the boundaries
+    Tend                    The total time
+    dt                      Time step 
+    B                       Channel width
+    L                       Channel length
+    x_points                Amount of points in the x-direction
+    y_points                Amount of points in the y-direction
+    dir                     Name of the direction the files get savid in
+    =#
 
 #Initialization to speed up second time function is called
 Shallow_water_equations_newton_solver(order,degree,2*dt,dt,B,L,x_points,y_points,dir)
