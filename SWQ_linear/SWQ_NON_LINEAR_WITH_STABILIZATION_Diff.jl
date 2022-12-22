@@ -115,7 +115,7 @@ function Shallow_water_equations_newton_solver(
 
     #Drag coefficient term
     func_cD(t,(u,ζ),(w,ϕ)) = cD* (meas∘u) * u⋅w/(ζ+H-h)
-    dfunc_cD(t,(u,ζ),(du,dζ),(w,ϕ)) = cD*(meas∘u)*u*dζ⋅w/((ζ+H-h)*(ζ+H-h))+cD*u⋅du*u⋅w/((meas∘(u+1e-14))*(ζ+H-h)) + cD*(meas∘u)*du⋅w/(ζ+H-h)
+    dfunc_cD(t,(u,ζ),(du,dζ),(w,ϕ)) = cD/(ζ+H-h)*w⋅((meas∘u)*u*dζ/(ζ+H-h)+u⋅du*u/((meas∘(u+1e-14))) + (meas∘u)*du)
 
     #Gravitational (without boundary)
     func_g(t,(u,ζ),(w,ϕ)) = - g*(∇⋅(w))*ζ
@@ -177,7 +177,7 @@ function Shallow_water_equations_newton_solver(
     op = TransientFEOperator(res,jac,jac_t,X,Y)
     nls = NLSolver(show_trace=true,linesearch=BackTracking())
     ode_solver = ThetaMethod(nls,dt,0.5)
-    x = solve(ode_solver,op,uhn,0.0,Tend)  # --> Replace Used GridAp ThetaMethod by DifferentialPackage
+    x = solve(ode_solver,op,uhn,0.0,Tend)  
 
 
     #''''''''''''''Saving''''''''''''''##
