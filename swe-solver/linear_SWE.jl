@@ -1,4 +1,4 @@
-module Linear_SWE_solver
+
 using Gridap
 using WriteVTK
 using LineSearches: BackTracking
@@ -20,7 +20,7 @@ function uζ(u₀,ζ₀,X,Y,dΩ)
 end
 
 
-function run_linear_SWE(order,degree,ζ₀,u₀,model)
+function run_linear_SWE(order,degree,ζ₀,u₀,forcefunc)
 
     #Parameters
     latitude = 52
@@ -30,6 +30,7 @@ function run_linear_SWE(order,degree,ζ₀,u₀,model)
     H = 0.5 #Constant layer depth at rest
 
     # Generate the model
+    model = GmshDiscreteModel("swe-solver/meshes/100x100periodic.msh")
     DC = ["left","right"]
     dir = "swe-solver/output_linear_swe"
     Ω = Triangulation(model)
@@ -39,10 +40,7 @@ function run_linear_SWE(order,degree,ζ₀,u₀,model)
     nΓ = get_normal_vector(Γ)
     dΓ = Measure(Γ,degree)
 
-
-
     #Make reference spaces
-
     reffe_rt = ReferenceFE(raviart_thomas,Float64,order)#
     V = TestFESpace(model,reffe_rt,conformity=:HDiv,dirichlet_tags=DC)#
     udc(x,t::Real) = VectorValue(0.0,0.0)
@@ -66,9 +64,11 @@ function run_linear_SWE(order,degree,ζ₀,u₀,model)
 
     uζn = uζ(un,ζn,X,Y,dΩ)
     un,ζn = uζn
-    #forcefunc(t) = VectorValue(0.0,0.0*0.5*cos(π*(1/5)*t))
+    
 
-    res(t,(u,ζ),(w,ϕ)) = ∫(∂t(u)⋅w + w⋅(f*(perp∘(u))) - (∇⋅(w))*g*ζ + ∂t(ζ)*ϕ + ϕ*H*(∇⋅(u)))dΩ
+    forcefunc_x(t) = x -> forcefunc(x,t)
+
+    res(t,(u,ζ),(w,ϕ)) = ∫(∂t(u)⋅w + w⋅(f*(perp∘(u))) - (∇⋅(w))*g*ζ + ∂t(ζ)*ϕ + ϕ*H*(∇⋅(u)) - forcefunc_x(t)⋅w)dΩ
     jac(t,(u,ζ),(du,dζ),(w,ϕ)) = ∫(w⋅(f*(perp∘(du))) - (∇⋅(w))*g*dζ + ϕ*(H*(∇⋅(du))))dΩ
     jac_t(t,(u,ζ),(dut,dζt),(w,ϕ)) = ∫(dut⋅w + dζt*ϕ)dΩ
 
@@ -80,7 +80,7 @@ function run_linear_SWE(order,degree,ζ₀,u₀,model)
 
     if isdir(dir)
         output_file = paraview_collection(joinpath(dir,"linear_topo"))do pvd
-            pvd[0.0] = createvtk(Ω,joinpath(dir,"linear_topo0.0.vtu"),cellfields=["u"=>un,"ζ"=>(ζn)])
+            pvd[0.0] = createvtk(Ω,joinpath(dir,"linear_topo0.0.vtu"),cellfields=["u"=>un,"ζ"=>(ζn + H)])
             for (x,t) in x
                 u,ζ = x
                 pvd[t] = createvtk(Ω,joinpath(dir,"linear_topo$t.vtu"),cellfields=["u"=>u,"ζ"=>(ζ+H)])
@@ -90,7 +90,7 @@ function run_linear_SWE(order,degree,ζ₀,u₀,model)
     else
         mkdir(dir)
         output_file = paraview_collection(joinpath(dir,"linear_topo")) do pvd
-            pvd[0.0] = createvtk(Ω,joinpath(dir,"linear_topo0.0.vtu"),cellfields=["u"=>un,"ζ"=>(ζn)])
+            pvd[0.0] = createvtk(Ω,joinpath(dir,"linear_topo0.0.vtu"),cellfields=["u"=>un,"ζ"=>(ζn + H)])
             for (x,t) in x
                 u,ζ = x
                 pvd[t] = createvtk(Ω,joinpath(dir,"linear_topo$t.vtu"),cellfields=["u"=>u,"ζ"=>(ζ+H)])
@@ -99,4 +99,24 @@ function run_linear_SWE(order,degree,ζ₀,u₀,model)
         end
     end
 end
+function ζ₀((x,y))
+    h =0.05*exp(-0.01*(x-25)^2 -0.01*(y-25)^2)
+    h
 end
+
+
+function u₀((x,y))
+    u = VectorValue(0.0,0.0)
+    u
+end
+
+function forcefunc((x,y),t)
+    f = VectorValue(0.0,0.0*0.5*cos(π*(1/5)*t))
+    f
+end
+
+order = 0
+degree = 4
+
+
+run_linear_SWE(order,degree,ζ₀,u₀,forcefunc)
