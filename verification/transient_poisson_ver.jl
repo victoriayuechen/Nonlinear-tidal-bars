@@ -8,11 +8,18 @@ RightX = 2
 LeftY = 0
 RightY = 2
 
+l_x = abs(RightX - LeftX)
+l_y = abs(RightY - LeftY)
+
+t₀ = 0.0
+T = 10.0
+d = 2 * (T - t₀)
+
 x_c = (RightX - LeftX)/2
 y_c = (RightY - LeftY)/2
 
 domain = (LeftX, RightX, LeftY, RightY)
-partition = (100, 100)
+partition = (20, 20)
 
 model = CartesianDiscreteModel(domain,partition)
 
@@ -36,27 +43,44 @@ refFE = ReferenceFE(lagrangian,Float64,2)
 # The space of test functions is constant in time and is defined in steady problems:
 V = TestFESpace(model,refFE,dirichlet_tags=DC)
 
-# g(x,t::Real) = 0.0
-# g(t::Real) = x -> g(x,t)
+g(x,t::Real) = 0.0
+g(t::Real) = x -> g(x,t)
 
-# g(x, t) = 0.0
-um(x,t::Real) = sin(π*t/10) * (x[1]^2 + x[2]^2)
+# manufactured solution 1
+um(x,t::Real) = sin(π*t/d) * (x[1]^2 + x[2]^2)
 um(t::Real) = x -> um(x,t)
 
+# manufactured solution 2 (zero Dirichlet BC)
+# um(x,t::Real) = sin(π*t/d) * sin(π*x[1]/l_x) * sin(π*x[2]/l_y) * (x[1]^2 + x[2]^2)
+# um(t::Real) = x -> um(x,t)
+
+
 U = TransientTrialFESpace(V,um) # automatic BC (not sure if it works like that)
+
 
 # manufactured time derivative
 um_t(x,t::Real) = (π/10) * cos(π * t/10) * (x[1]^2 + x[2]^2)
 um_t(t::Real) = x -> um_t(x,t)
 
-#manufactured gradient
-um_g(x,t::Real) = VectorValue(2 * sin(π*t/10) * x[1], 2 * sin(π*t/10) * x[2])
+#manufactured1 gradient
+um_g(x,t::Real) = VectorValue(2 * sin(π*t/d) * x[1], 2 * sin(π*t/d) * x[2])
 um_g(t::Real) = x -> um_g(x,t)
 
+#manufactured2 gradient
+# um_g(x,t::Real) = VectorValue(sin(π*t/d) * sin(π*x[2]/l_y) * ((x[1]^2 + x[2]^2) * (π/l_x) * cos(π*x[1]/l_x) + 2 * x[1] * sin(π*x[1]/l_x)), sin(π*t/d) * sin(π*x[1]/l_x) * ((x[1]^2 + x[2]^2) * (π/l_y) * cos(π*x[2]/l_y) + 2 * x[2] * sin(π*x[2]/l_y)))
+# um_g(t::Real) = x -> um_g(x,t)
 
-# corresponding force function
-f(x,t::Real) = -((π/10) * cos(π * t/10) * (x[1]^2 + x[2]^2) + 4 * sin(π * t/10))
+# corresponding manufactured1 force function
+f(x,t::Real) = (π/d) * cos(π * t/d) * (x[1]^2 + x[2]^2) - 4 * sin(π * t/d)
 f(t::Real) = x -> f(x,t)
+
+# corresponding manufactured2 force function
+# f(x,t::Real) = - sin(π*t/d) * sin(π*x[2]/l_y) * (4 * (π*x[1]/l_x) * cos(π*x[1]/l_x) - sin(π*x[1]/l_x) * ((x[1]^2 + x[2]^2) * (π/l_x)^2 - 2)) -
+# sin(π*t/d) * sin(π*x[1]/l_x) * (4 * (π*x[2]/l_y) * cos(π*x[2]/l_y) - sin(π*x[2]/l_y) * ((x[1]^2 + x[2]^2) * (π/l_y)^2 - 2)) +
+# (π/d) * cos(π*t/d) * sin(π*x[1]/l_x) * sin(π*x[2]/l_y) * (x[1]^2 + x[2]^2)
+# f(t::Real) = x -> f(x,t)
+
+
 # ## Weak form
 
 # κ(t) = 1.0 + 0.95*sin(2π*t)
@@ -78,8 +102,7 @@ ode_solver = ThetaMethod(linear_solver,Δt,θ)
 
 # Finally, we define the solution using the `solve` function, giving the ODE solver, the FE operator, an initial solution, an initial time and a final time. To construct the initial condition we interpolate the initial value (in that case a constant value of 0.0) into the FE space $U(t)$ at $t=0.0$.
 u₀ = interpolate_everywhere(0.0,U(0.0))
-t₀ = 0.0
-T = 10.0
+
 uₕₜ = solve(ode_solver,op,u₀,t₀,T)
 
 # ## Postprocessing
@@ -97,12 +120,12 @@ createpvd("poisson_transient_solution") do pvd
     push!(el2, sqrt(sum( ∫( e*e )*dΩ )))
     push!(eh1, sqrt(sum( ∫( e*e + ∇(e)⋅∇(e) )*dΩ )))
     push!(t_base, t)
-    pvd[t] = createvtk(Ω,"poisson_transient_solution_$t"*".vtu",cellfields=["u"=>uₕ, "force"=>f(t), "man"=>um(t), "error"=>(um(t) - uₕ), "e_grad"=>(um_g(t) - ∇(uₕ))])
+    pvd[t] = createvtk(Ω,"poisson_transient_solution_$t"*".vtu",cellfields=["u"=>uₕ, "force"=>f(t), "man"=>um(t), "error"=>(um(t) - uₕ), "e_grad"=>(um_g(t) - ∇(uₕ))]) # time error: this doesn't work: "e_time"=>(um_t(t) - ∂t(uₕₜ))
   end
 end
 
 plot(t_base,[el2, eh1],
-    label=["L2, H1"],
+    label=["L2", "H1"],
     shape=:auto,
     xlabel="time",ylabel="error norm")
 
