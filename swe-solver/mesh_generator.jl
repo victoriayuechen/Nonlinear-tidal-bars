@@ -1,7 +1,7 @@
 module MyMeshGenerator
 using Gmsh: gmsh
 
-export generate_rectangle_mesh
+export generate_rectangle_mesh, generate_arc_mesh
 
 
 """
@@ -12,6 +12,7 @@ Parameters:
     filename: Name of the mesh file 
     modelname: Name of the model 
     lc: The size of the triangles, default is 1e-2. 
+    periodic: Whether the top and bottom of rectangle is periodic 
 Creates a <filename>.msh in the meshes folder.
 """
 function generate_rectangle_mesh(Lx::Float32, Ly::Float32, filename::String, modelname::String, lc::Float32, periodic::Bool)
@@ -49,8 +50,6 @@ function generate_rectangle_mesh(Lx::Float32, Ly::Float32, filename::String, mod
         gmsh.model.mesh.set_periodic(1, [1], [3], transformation_matrix)
     end
 
-
-
     gmsh.model.addPhysicalGroup(0, [1, 2], 1, "bottom")
     gmsh.model.addPhysicalGroup(0, [3, 4], 2, "top")
     gmsh.model.addPhysicalGroup(1, [1], 1, "bottom")
@@ -64,6 +63,62 @@ function generate_rectangle_mesh(Lx::Float32, Ly::Float32, filename::String, mod
 
     gmsh.finalize()
 end 
+
+"""
+Generate arched mesh based on coordinates and triangle size. 
+Parameters:
+    inner radius: Inner Radius of the arc (similar to curvature)
+    width: Width of in canal
+    filename: Name of the mesh file 
+    modelname: Name of the model 
+    lc: The size of the triangles, default is 1e-2. 
+    periodic: Whether the top and bottom of arc is periodic 
+Creates a <filename>.msh in the meshes folder.
+"""
+function generate_arc_mesh(innerradius::Float32, width::Float32, filename::String, modelname::String, lc::Float32, periodic::Bool)
+    # Initialise mesh generator 
+    gmsh.initialize()
+    gmsh.model.add(modelname)
+    outside = innerradius + width 
+
+    center = gmsh.model.geo.addPoint(0, 0, 0, lc)
+    p1 = gmsh.model.geo.addPoint(innerradius, 0, 0, lc)
+    p2 = gmsh.model.geo.add_point(outside, 0.0, 0.0, lc)
+    p3 = gmsh.model.geo.add_point(0.0, outside, 0.0, lc)
+    p4 = gmsh.model.geo.add_point(0.0, innerradius, 0.0, lc)
+
+    l1 = gmsh.model.geo.add_line(p1, p2)
+    l2 = gmsh.model.geo.add_circle_arc(p2, center, p3)
+    l3 = gmsh.model.geo.add_line(p3, p4)
+    l4 = gmsh.model.geo.add_circle_arc(p4, center, p1)
+ 
+    # Create the closed curve loop and the surface
+    loop = gmsh.model.geo.add_curve_loop([l1, l2, l3, l4])
+    surf = gmsh.model.geo.add_plane_surface([loop])
+
+    gmsh.model.geo.synchronize()
+
+    # Create the physical domains
+    gmsh.model.add_physical_group(1, [l1], -1, "bottom")
+    gmsh.model.add_physical_group(1, [l2], -1, "left")
+    gmsh.model.add_physical_group(1, [l3], -1, "top")
+    gmsh.model.add_physical_group(1, [l4], -1, "right")
+    gmsh.model.add_physical_group(2, [surf])
+
+    # Define Affine Operator 
+    transformation_matrix = zeros(4, 4)
+    transformation_matrix[1, 2] = 1  
+    transformation_matrix[2, 1] = -1 
+    transformation_matrix[3, 3] = 1
+    transformation_matrix[4, 4] = 1
+    transformation_matrix = vec(transformation_matrix')
+    gmsh.model.mesh.set_periodic(1, [l1], [l3], transformation_matrix)
+
+    # Generate a 2D mesh
+    gmsh.model.mesh.generate(2)
+    gmsh.write(filename)
+    gmsh.finalize()
+end
 end
 
 
