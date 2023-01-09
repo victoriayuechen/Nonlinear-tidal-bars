@@ -14,7 +14,7 @@ Parameters:
     lc: The size of the triangles, default is 1e-2. 
 Creates a <filename>.msh in the meshes folder.
 """
-function generate_rectangle_mesh(Lx::Float32, Ly::Float32, filename::String, modelname::String, lc::Float32, periodic::Bool)
+function generate_rectangle_mesh(Lx::Float64, Ly::Float64, filename::String, modelname::String, lc::Float64, periodic::Bool)
     # Initialise mesh generator 
     gmsh.initialize()
     gmsh.model.add(modelname)
@@ -35,8 +35,16 @@ function generate_rectangle_mesh(Lx::Float32, Ly::Float32, filename::String, mod
     gmsh.model.geo.addPlaneSurface([1], 1)
 
     gmsh.model.geo.synchronize()
+
+
+    # transformation_matrix = zeros(4, 4)
+    # transformation_matrix[1, 2] = 1  # -sin(-pi/2)
+    # transformation_matrix[2, ] = -1 #  cos(-pi/2)
+    # transformation_matrix[3, 3] = 1
+    # transformation_matrix[4, 4] = 1
+    # transformation_matrix = vec(transformation_matrix')
     if periodic
-        gmsh.model.mesh.setPeriodic(1, [1], [3], [1, 0, 0, 1, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1])
+        gmsh.model.mesh.setPeriodic(1, [1], [3], [1, 0, 0, 0, 0, 1, 0, -Ly, 0, 0, 1, 0, 0, 0, 0, 1])
     end
 
     gmsh.model.addPhysicalGroup(0, [1, 2], 1, "bottom")
@@ -48,7 +56,7 @@ function generate_rectangle_mesh(Lx::Float32, Ly::Float32, filename::String, mod
 
     gmsh.model.addPhysicalGroup(2, [1], 1, "interior")
     gmsh.model.mesh.generate(2)
-    gmsh.write(filename)
+    gmsh.write("swe-solver/mesh.msh")
 
     gmsh.finalize()
 end 
