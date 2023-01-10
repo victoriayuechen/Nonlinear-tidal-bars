@@ -6,8 +6,8 @@ using Gridap.CellData
 using WriteVTK
 using LineSearches: BackTracking
 # using GridapGmsh
-# include("mesh_generator.jl")
-# using .MyMeshGenerator
+include("mesh_generator.jl")
+using .MyMeshGenerator
 
 
 
@@ -26,8 +26,8 @@ end
 function linear_SWE(order,degree)
 
     #Parameters
-    B = 1 #Channel width
-    L = 5 #Channel Length
+    B = 1.0 #Channel width
+    L = 5.0 #Channel Length
     latitude = 52
     η = 7.29e-5
     f = 2*η*sin(latitude*(π/180))
@@ -40,19 +40,22 @@ function linear_SWE(order,degree)
 
 
     #Make model
-    domain = (0,B,0,L)
-    partition = (20,20)
+    # domain = (0,B,0,L)
+    # partition = (20,20)
     # Generate the model
-    model = CartesianDiscreteModel(domain,partition;isperiodic=(false,true))
+    modelfile = "swe-solver/meshes/10x10periodic.msh"
+    generate_rectangle_mesh(B, L, modelfile, "rectangle", 0.1, true)
+    #Create model
+    model = GmshDiscreteModel(modelfile)
 
     #Make labels
-    labels = get_face_labeling(model)
-    add_tag_from_tags!(labels,"bottom",[1,2,5])
-    add_tag_from_tags!(labels,"left",[7])
-    add_tag_from_tags!(labels,"right",[8])
-    add_tag_from_tags!(labels,"top",[3,4,6])
-    add_tag_from_tags!(labels,"inside",[9])
-    writevtk(model, "verification/output/model")
+    # labels = get_face_labeling(model)
+    # add_tag_from_tags!(labels,"bottom",[1,2,5])
+    # add_tag_from_tags!(labels,"left",[7])
+    # add_tag_from_tags!(labels,"right",[8])
+    # add_tag_from_tags!(labels,"top",[3,4,6])
+    # add_tag_from_tags!(labels,"inside",[9])
+    # writevtk(model, "verification/output/model")
     DC = ["left","right"]
     dir = "verification/output"
     Ω = Triangulation(model)
