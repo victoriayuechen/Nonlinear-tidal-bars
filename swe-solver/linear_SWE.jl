@@ -6,6 +6,7 @@ using GridapGmsh
 # using .MyMeshGenerator
 
 export run_linear_SWE
+export run_linear_SWE
 
 function perp(u)
     p = VectorValue(-u[2],u[1])
@@ -15,10 +16,14 @@ end
 function uζ(u₀,ζ₀,X,Y,dΩ)
     a((u,ζ),(w,ϕ)) = ∫(w⋅u +ϕ*ζ)dΩ
     b((w,ϕ)) = ∫(w⋅u₀ + ϕ*ζ₀)dΩ
+function uζ(u₀,ζ₀,X,Y,dΩ)
+    a((u,ζ),(w,ϕ)) = ∫(w⋅u +ϕ*ζ)dΩ
+    b((w,ϕ)) = ∫(w⋅u₀ + ϕ*ζ₀)dΩ
     solve(AffineFEOperator(a,b,X,Y))
 end
 
 
+function run_linear_SWE(order,degree,ζ₀,u₀,forcefunc)
 function run_linear_SWE(order,degree,ζ₀,u₀,forcefunc)
 
     #Parameters 
@@ -66,6 +71,9 @@ function run_linear_SWE(order,degree,ζ₀,u₀,forcefunc)
     res(t,(u,ζ),(w,ϕ)) = ∫(∂t(u)⋅w + w⋅(f*(perp∘(u))) - (∇⋅(w))*g*ζ + ∂t(ζ)*ϕ + ϕ*H*(∇⋅(u)) - forcefunc_x(t)⋅w)dΩ
     jac(t,(u,ζ),(du,dζ),(w,ϕ)) = ∫(w⋅(f*(perp∘(du))) - (∇⋅(w))*g*dζ + ϕ*(H*(∇⋅(du))))dΩ
     jac_t(t,(u,ζ),(dut,dζt),(w,ϕ)) = ∫(dut⋅w + dζt*ϕ)dΩ
+    res(t,(u,ζ),(w,ϕ)) = ∫(∂t(u)⋅w + w⋅(f*(perp∘(u))) - (∇⋅(w))*g*ζ + ∂t(ζ)*ϕ + ϕ*H*(∇⋅(u)) - forcefunc_x(t)⋅w)dΩ
+    jac(t,(u,ζ),(du,dζ),(w,ϕ)) = ∫(w⋅(f*(perp∘(du))) - (∇⋅(w))*g*dζ + ϕ*(H*(∇⋅(du))))dΩ
+    jac_t(t,(u,ζ),(dut,dζt),(w,ϕ)) = ∫(dut⋅w + dζt*ϕ)dΩ
 
     op = TransientFEOperator(res,jac,jac_t,X,Y)
     nls = NLSolver(show_trace=true,linesearch=BackTracking())
@@ -78,6 +86,8 @@ function run_linear_SWE(order,degree,ζ₀,u₀,forcefunc)
             for (x,t) in x
                 u,ζ = x
                 pvd[t] = createvtk(Ω,joinpath(dir,"linear_topo$t.vtu"),cellfields=["u"=>u,"ζ"=>(ζ+H)])
+                u,ζ = x
+                pvd[t] = createvtk(Ω,joinpath(dir,"linear_topo$t.vtu"),cellfields=["u"=>u,"ζ"=>(ζ+H)])
                 println("done $t/$Tend")
             end
         end
@@ -85,6 +95,8 @@ function run_linear_SWE(order,degree,ζ₀,u₀,forcefunc)
         mkdir(dir)
         output_file = paraview_collection(joinpath(dir,"linear_topo")) do pvd
             for (x,t) in x
+                u,ζ = x
+                pvd[t] = createvtk(Ω,joinpath(dir,"linear_topo$t.vtu"),cellfields=["u"=>u,"ζ"=>(ζ+H)])
                 u,ζ = x
                 pvd[t] = createvtk(Ω,joinpath(dir,"linear_topo$t.vtu"),cellfields=["u"=>u,"ζ"=>(ζ+H)])
                 println("done $t/$Tend")
