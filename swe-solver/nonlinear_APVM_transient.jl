@@ -15,11 +15,10 @@ using Gridap.TensorValues: meas
 #Implementation in Gridap for this 2D domain also uses similar code produced by the Gridap GeoSciences github: https://github.com/gridapapps/GridapGeosciences.jl
 
 
-export APVM_run
 
-function uh(u₀,h₀,F₀,q₀,X,Y,dΩ)
-    a((u,h,r,u2),(w,ϕ,ϕ2,w2)) = ∫(w⋅u + ϕ*h + w2⋅u2 + ϕ2*r)dΩ
-    b((w,ϕ,ϕ2,w2)) = ∫(w⋅u₀ + ϕ*h₀ + w2⋅F₀ + q₀*ϕ2)dΩ
+function uD(u₀,D₀,F₀,q₀,X,Y,dΩ)
+    a((u,D,r,u2),(w,ϕ,ϕ2,w2)) = ∫(w⋅u + ϕ*D + w2⋅u2 + ϕ2*r)dΩ
+    b((w,ϕ,ϕ2,w2)) = ∫(w⋅u₀ + ϕ*D₀ + w2⋅F₀ + q₀*ϕ2)dΩ
     solve(AffineFEOperator(a,b,X,Y))
 end
 
@@ -29,8 +28,8 @@ function compute_mass_flux!(F,dΩ,V,RTMMchol,u)
     ldiv!(RTMMchol,get_free_dof_values(F))
 end
 
-function compute_potential_vorticity!(q,H1h,H1hchol,dΩ,R,S,h,u,f)
-    a(r,s) = ∫(s*h*r)dΩ
+function compute_potential_vorticity!(q,H1h,H1hchol,dΩ,R,S,D,u,f)
+    a(r,s) = ∫(s*D*r)dΩ
     c(s)   = ∫(perp∘(∇(s))⋅(u) + s*f)dΩ
     Gridap.FESpaces.assemble_matrix_and_vector!(a, c, H1h, get_free_dof_values(q), R, S)
     lu!(H1hchol, H1h)
@@ -67,7 +66,7 @@ function Gridap.get_free_dof_values(functions...)
 end
 
 
-function APVM_run(order,degree,h₀,u₀,topography,forcefunc,dir,periodic::Bool,Tend,dt,domain,partition)
+function APVM_run(order,degree,D₀,u₀,topography,forcefunc,dir,periodic::Bool,Tend,dt,model)
     #Parameters
     latitude = 52 #Latitude of the model being analysed
     η = 7.29e-5
@@ -76,24 +75,8 @@ function APVM_run(order,degree,h₀,u₀,topography,forcefunc,dir,periodic::Bool
     g = 9.81
     T0 = 0.0
     τ = dt*0.5
-
-    model = GmshDiscreteModel("swe-solver/meshes/100x100periodic4.msh")
+    
     DC = ["left","right"]
-    BC ="boundary"
-    #Make model
-    # if periodic
-    #     model = CartesianDiscreteModel(domain,partition;isperiodic=(false,true))
-    # else
-    #     model = CartesianDiscreteModel(domain,partition)
-    # end
-
-    #Make labels
-    # labels = get_face_labeling(model)
-    # add_tag_from_tags!(labels,"bottom",[1,2,5])
-    # add_tag_from_tags!(labels,"left",[7])
-    # add_tag_from_tags!(labels,"right",[8])
-    # add_tag_from_tags!(labels,"top",[3,4,6])
-    # add_tag_from_tags!(labels,"inside",[9])
 
     #Make triangulations and boundaries
     Ω = Triangulation(model)
@@ -138,8 +121,8 @@ function APVM_run(order,degree,h₀,u₀,topography,forcefunc,dir,periodic::Bool
     un = solve(AffineFEOperator(a1,l1,U,V))
     #h, fluid depth
     a2(u,v) = ∫(v*u)dΩ
-    l2(v) = ∫(v*h₀)dΩ
-    hn = solve(AffineFEOperator(a2,l2,P,Q))
+    l2(v) = ∫(v*D₀)dΩ
+    Dn = solve(AffineFEOperator(a2,l2,P,Q))
     #b, topography
     a3(u,v) = ∫(v*u)dΩ
     l3(v) = ∫(v*topography)dΩ
@@ -151,15 +134,15 @@ function APVM_run(order,degree,h₀,u₀,topography,forcefunc,dir,periodic::Bool
 
     #Build and compute initial potential vorticity
     q₀ = clone_fe_function(R,fn)
-    compute_potential_vorticity!(q₀,H1MM,H1MMchol,dΩ,R,S,hn,un,fn)
+    compute_potential_vorticity!(q₀,H1MM,H1MMchol,dΩ,R,S,Dn,un,fn)
 
     #Build and compute initial mass flux
     F₀ = clone_fe_function(V,un)
-    compute_mass_flux!(F₀,dΩ,V,RTMMchol,un*hn)
+    compute_mass_flux!(F₀,dΩ,V,RTMMchol,un*Dn)
     
     #Solve whole coupled system with the initial values
-    uhn = uh(un,hn,F₀,q₀,X,Y,dΩ)
-    un,hn,q,F= uhn
+    uDn = uD(un,Dn,F₀,q₀,X,Y,dΩ)
+    un,Dn,q,F= uDn
 
     #Forcing function on u(t)
     forcfunc(t) = x -> forcefunc(x,t)
@@ -169,33 +152,33 @@ function APVM_run(order,degree,h₀,u₀,topography,forcefunc,dir,periodic::Bool
     dnorm(u,du) = u ⋅ du / norm(u)
 
     #Define residual, jacobian in space and time
-    res(t,(u,h,q,F),(w,ϕ,ϕ2,w2)) = ∫(∂t(u)⋅w + ((q-τ*(u⋅∇(q)))*(perp∘(F)))⋅w - (∇⋅(w))*(g*(h+b) + 0.5*(u⋅u)) + ∂t(h)*ϕ + w2⋅(F-u*h) + ϕ2*(q*h) +  (perp∘(∇(ϕ2)))⋅u - (ϕ2*fn) + ϕ*(∇⋅(F))- forcfunc(t)⋅w + ((cd*(norm(u))*u)/(h+b+1e-14))⋅w)dΩ + ∫((g*(h+b) + 0.5*(u⋅u))*(w⋅nΓ) + nΓ⋅(perp∘(u))*ϕ2)dΓ 
-    jac(t,(u,h,q,F),(du,dh,dq,dF),(w,ϕ,ϕ2,w2)) = ∫(((dq - τ*(u⋅∇(dq) + du⋅∇(q)))*(perp∘(F)))⋅w + ((q-τ*(u⋅∇(q)))*(perp∘(dF)))⋅w - (∇⋅(w))*(g*(dh) + (du⋅u)) + w2⋅(dF - du*h - dh*u) + ϕ2*(q*dh) + ϕ2*(dq*h) + du⋅(perp∘(∇(ϕ2))) + ϕ*(∇⋅(dF)) + (cd*(dnorm(u,du)*u)/(h+b+1e-14) + cd*(norm(u)/(h+b+1e-14)*du) + cd*(norm(u)*u*h)/((h+b+1e-14)*(h+b+1e-14)))⋅w )dΩ+ ∫((g*(dh) + (du⋅u))*(w⋅nΓ) + nΓ⋅(perp∘(du))*ϕ2)dΓ
-    jac_t(t,(u,h),(dut,dht),(w,ϕ)) = ∫(dut⋅w + dht*ϕ)dΩ
+    res(t,(u,D,q,F),(w,ϕ,ϕ2,w2)) = ∫(∂t(u)⋅w + ((q-τ*(u⋅∇(q)))*(perp∘(F)))⋅w - (∇⋅(w))*(g*(D+b) + 0.5*(u⋅u)) + ∂t(D)*ϕ + w2⋅(F-u*D) + ϕ2*(q*D) +  (perp∘(∇(ϕ2)))⋅u - (ϕ2*fn) + ϕ*(∇⋅(F))- forcfunc(t)⋅w + ((cd*(norm(u))*u)/(D+b+1e-14))⋅w)dΩ + ∫((g*(D+b) + 0.5*(u⋅u))*(w⋅nΓ) + nΓ⋅(perp∘(u))*ϕ2)dΓ 
+    jac(t,(u,D,q,F),(du,dD,dq,dF),(w,ϕ,ϕ2,w2)) = ∫(((dq - τ*(u⋅∇(dq) + du⋅∇(q)))*(perp∘(F)))⋅w + ((q-τ*(u⋅∇(q)))*(perp∘(dF)))⋅w - (∇⋅(w))*(g*(dD) + (du⋅u)) + w2⋅(dF - du*D - dD*u) + ϕ2*(q*dD) + ϕ2*(dq*D) + du⋅(perp∘(∇(ϕ2))) + ϕ*(∇⋅(dF)) + (cd*(dnorm(u,du)*u)/(D+b+1e-14) + cd*(norm(u)/(D+b+1e-14)*du) + cd*(norm(u)*u*D)/((D+b+1e-14)*(D+b+1e-14)))⋅w )dΩ+ ∫((g*(dD) + (du⋅u))*(w⋅nΓ) + nΓ⋅(perp∘(du))*ϕ2)dΓ
+    jac_t(t,(u,D),(dut,dDt),(w,ϕ)) = ∫(dut⋅w + dDt*ϕ)dΩ
 
     #Define operators and solvers
     op = TransientFEOperator(res,jac,jac_t,X,Y)
     nls = NLSolver(show_trace=true,linesearch=BackTracking())
     ode_solver = ThetaMethod(nls,dt,0.5)
-    x = solve(ode_solver,op,uhn,T0,Tend)
+    x = solve(ode_solver,op,uDn,T0,Tend)
 
     #Output results
     if isdir(dir)
         output_file = paraview_collection(joinpath(dir,"nonlinear_topo"))do pvd
-            pvd[0.0] = createvtk(Ω,joinpath(dir,"nonlinear_topo0.0.vtu"),cellfields=["u"=>un,"h"=>(hn+b),"b"=>b])
+            pvd[0.0] = createvtk(Ω,joinpath(dir,"nonlinear_topo0.0.vtu"),cellfields=["u"=>un,"D"=>(Dn+b),"b"=>b])
             for (x,t) in x
-                u,h,F = x
-                pvd[t] = createvtk(Ω,joinpath(dir,"nonlinear_topo$t.vtu"),cellfields=["u"=>u,"h"=>(h+b),"b"=>b])
+                u,D,F = x
+                pvd[t] = createvtk(Ω,joinpath(dir,"nonlinear_topo$t.vtu"),cellfields=["u"=>u,"D"=>(D+b),"b"=>b])
                 println("done $t/$Tend")
             end
         end
     else
         mkdir(dir)
         output_file = paraview_collection(joinpath(dir,"nonlinear_topo")) do pvd
-            pvd[0.0] = createvtk(Ω,joinpath(dir,"nonlinear_topo0.0.vtu"),cellfields=["u"=>un,"h"=>(hn+b),"b"=>b])
+            pvd[0.0] = createvtk(Ω,joinpath(dir,"nonlinear_topo0.0.vtu"),cellfields=["u"=>un,"D"=>(Dn+b),"b"=>b])
             for (x,t) in x
-                u,h,F = x
-                pvd[t] = createvtk(Ω,joinpath(dir,"nonlinear_topo$t.vtu"),cellfields=["u"=>u,"h"=>(h+b),"b"=>b])
+                u,D,F = x
+                pvd[t] = createvtk(Ω,joinpath(dir,"nonlinear_topo$t.vtu"),cellfields=["u"=>u,"D"=>(D+b),"b"=>b])
                 println("done $t/$Tend")
             end
         end
@@ -205,9 +188,9 @@ end
 
 
 #Variable functions to be used to setup model, used for local tests
-function h₀((x,y))
-    hout = -topography((x,y)) +  0.5 + 0.05*exp(-0.01*(x-50)^2 -0.01*(y-25)^2)
-    hout
+function D₀((x,y))
+    Dout = -topography((x,y)) +  0.5 + 0.05*exp(-0.01*(x-50)^2 -0.01*(y-25)^2)
+    Dout
 end
 
 function topography((x,y))
@@ -235,16 +218,13 @@ if !isdir(joinpath(outputdir,dir))
     mkdir(joinpath(outputdir,dir))
 end
 
-B = 100
-L = 100
-partition = (50,50)
-domain = (0,B,0,L)
+model = GmshDiscreteModel("swe-solver/meshes/100x100periodic.msh")
 
 #=
 Input:
 order       = order of FE polynomials
 degree      = lebesgue measure with quadruture rule of degree
-h_0         = initial fluid depth h
+D_0         = initial fluid depth h
 u_0         = initial velocity vector field
 topography  = bottom topography, passed as a function of x and Y
 forcfunc    = The forcing function, passed as a function in x,y
@@ -254,6 +234,4 @@ Periodic    = if true periodic in y-dir
 Tend        = Total runtime
 dt          = Time setup
 =#
-APVM_run(0,4,h₀,u₀,topography,forcfunc,joinpath(outputdir,dir),true,100.0,1.0,domain,partition)
-
-
+APVM_run(0,4,D₀,u₀,topography,forcfunc,joinpath(outputdir,dir),true,100.0,1.0,model)
