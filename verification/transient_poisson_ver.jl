@@ -125,7 +125,7 @@ createpvd("poisson_transient_solution") do pvd
 end
 
 plot(t_base,[el2, eh1],
-    label=["L2", "H1"],
+    label=["L2" "H1"],
     shape=:auto,
     xlabel="time",ylabel="error norm")
 

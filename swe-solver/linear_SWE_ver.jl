@@ -5,9 +5,10 @@ using Gridap
 using Gridap.CellData
 using WriteVTK
 using LineSearches: BackTracking
-# using GridapGmsh
-include("mesh_generator.jl")
-using .MyMeshGenerator
+using GridapGmsh
+using Plots
+# include("mesh_generator.jl")
+# using .MyMeshGenerator
 
 
 
@@ -22,7 +23,6 @@ end
 #     solve(AffineFEOperator(a,b,X,Y))
 # end
 
-
 function linear_SWE(order,degree)
 
     #Parameters
@@ -30,8 +30,8 @@ function linear_SWE(order,degree)
     L = 5.0 #Channel Length
     latitude = 52
     η = 7.29e-5
-    f = 2*η*sin(latitude*(π/180))
-    #f=0
+    #f = 2*η*sin(latitude*(π/180))
+    f=0
     g = 9.81
     H = 0.5 #Constant layer depth at rest
     Tend = 50
@@ -39,14 +39,17 @@ function linear_SWE(order,degree)
     B1 = 1.5 * B
 
 
-    #Make model
+    #Make model (option 1)
     # domain = (0,B,0,L)
     # partition = (20,20)
-    # Generate the model
-    modelfile = "swe-solver/meshes/10x10periodic.msh"
-    generate_rectangle_mesh(B, L, modelfile, "rectangle", 0.1, true)
-    #Create model
-    model = GmshDiscreteModel(modelfile)
+
+    #Make model (option 2)
+    # modelfile = "swe-solver/meshes/10x10periodic.msh"
+    # generate_rectangle_mesh(Float32(B), Float32(L), modelfile, "rectangle", Float32(0.1), true)
+    # model = GmshDiscreteModel(modelfile)
+
+    #Load up the model
+    model = GmshDiscreteModel("swe-solver/meshes/10x10periodic.msh")
 
     #Make labels
     # labels = get_face_labeling(model)
@@ -61,7 +64,7 @@ function linear_SWE(order,degree)
     Ω = Triangulation(model)
     dΩ = Measure(Ω,degree)
     dω = Measure(Ω,degree,ReferenceDomain())
-    Γ = BoundaryTriangulation(model,tags=DC)
+    Γ = BoundaryTriangulation(model,tags=["top", "bottom"])
     nΓ = get_normal_vector(Γ)
     dΓ = Measure(Γ,degree)
 
@@ -85,7 +88,7 @@ function linear_SWE(order,degree)
 
     A = (π/B)
     B = (π/L)
-    C = (π/(2 * Tend))
+    C = ((4 * π)/(1 * Tend))
 
     D = (π/B)
     E = (π/(7 * L))
@@ -94,11 +97,11 @@ function linear_SWE(order,degree)
 
     yref = L/2
 
-    u(x,t::Real) = VectorValue(sin(A*x[1])*sin(B*x[2])*sin(C*t),
-                                sin(A*x[1])*cos(E*(x[2]-yref))*sin(C*t))
+    u(x,t::Real) = VectorValue(sin(A*x[1])*sin(B*x[2])*sin(C*t) + 2.0,
+                                sin(A*x[1])*cos(E*(x[2]-yref))*sin(C*t) + 2.0)
     u(t::Real) = x -> u(x,t)
 
-    h(x,t::Real) = sin(F*x[1])*sin(G*x[2])*sin(C*t)
+    h(x,t::Real) = sin(F*x[1])*sin(G*x[2])*sin(C*t) + 2.0
     h(t::Real) = x -> h(x,t)
 
     
@@ -134,10 +137,10 @@ function linear_SWE(order,degree)
     V = TestFESpace(model,reffe_rt,conformity=:HDiv,dirichlet_tags=DC)#, dirichlet_masks=[(false, true), (false, true)])
     udc(x,t::Real) = VectorValue(0.0, 0.0)
     udc(t::Real) = x -> udc(x,t)
-    U = TransientTrialFESpace(V, [udc, udc])
+    U = TransientTrialFESpace(V, [u, u])
 
     reffe_lg = ReferenceFE(lagrangian,Float64,order)
-    Q = TestFESpace(model,reffe_lg,conformity=:L2, dirichlet_tags=DC)
+    Q = TestFESpace(model,reffe_lg,conformity=:L2)
     hdc(x,t::Real) = 0.0
     hdc(t::Real) = x -> hdc(x,t)
     P = TransientTrialFESpace(Q)
@@ -147,10 +150,10 @@ function linear_SWE(order,degree)
 
 
     res(t,(u,h),(w,ϕ)) = ∫(∂t(u)⋅w + w⋅(f*(perp∘(u))) + (∇⋅(w))*g*h + ∂t(h)*ϕ + ϕ*H*(∇⋅(u)) - f_u(t)⋅w - f_h(t)*ϕ)dΩ # + f_u(t)⋅w + f_h(t)*ϕ
-    #jac(t,(u,h),(du,dh),(w,ϕ)) = ∫(w⋅(f*(perp∘(du))) - (∇⋅(w))*g*dh + ϕ*(H*(∇⋅(du))))dΩ
-    #jac_t(t,(u,h),(dut,dht),(w,ϕ)) = ∫(dut⋅w + dht*ϕ)dΩ
+    jac(t,(u,h),(du,dh),(w,ϕ)) = ∫(w⋅(f*(perp∘(du))) - (∇⋅(w))*g*dh + ϕ*(H*(∇⋅(du))))dΩ
+    jac_t(t,(u,h),(dut,dht),(w,ϕ)) = ∫(dut⋅w + dht*ϕ)dΩ
 
-    op = TransientFEOperator(res,X,Y)
+    op = TransientFEOperator(res,jac,jac_t,X,Y)
     #nls = NLSolver(show_trace=true,linesearch=BackTracking())
     nls = LUSolver()
 
@@ -159,19 +162,35 @@ function linear_SWE(order,degree)
 
     x0 = interpolate_everywhere([u(t0), h(t0)], X(t0))
     
-    ode_solver = ThetaMethod(nls,2,0.5)
+    ode_solver = ThetaMethod(nls,0.5,0.5)
     s_h = solve(ode_solver,op,x0,0.0,Tend)
 
+    eul2 = Float64[] # L2 norm error array
+    ehl2 = Float64[]
+    h_c = Float64[]
+    
+    t_base = Float64[] # time base (I think Julia needs it to plot things...)
 
     if isdir(dir)
         output_file = paraview_collection(joinpath(dir,"linear"))do pvd
             #pvd[0.0] = createvtk(Ω,joinpath(dir,"linear_topo0.0.vtu"),cellfields=["u"=>un,"h"=>(hn)])
             for (x,t) in s_h
                 u_h,h_h = x
+                
                 eh = h_h - h(t)
                 eu = u_h - u(t)
+                
+                h_grid = (h_h - h(t)) / h(t)
+                h_cell = sum(∫( (h_h - h(t)) / h(t) )*dΩ)
+                #hm_cell = ∫( hm*hm )*dΩ
+                push!(ehl2, (sqrt(sum( ∫( eh*eh )*dΩ ))) )
+                push!(eul2, (sqrt(sum( ∫( eu⋅eu )*dΩ ))) )
+                push!(h_c, h_cell)
+                # push!(eh1, sqrt(sum( ∫( e*e + ∇(e)⋅∇(e) )*dΩ )))
+
+                push!(t_base, t)
                 pvd[t] = createvtk(Ω,joinpath(dir,"linear$t.vtu"),cellfields=["u"=>u_h,"h"=>h_h, "fu"=>f_u(t), "fh"=>f_h(t), "um"=>u(t),
-                 "hm"=>h(t), "eh"=>eh, "eu"=>eu])#, "um"=>u(t), "hm"=>h(t) , "eh"=>eh, "eu"=>eu,
+                 "hm"=>h(t), "eh"=>eh, "eu"=>eu, "h_grid"=>h_grid])#, "um"=>u(t), "hm"=>h(t) , "eh"=>eh, "eu"=>eu,
                 println("done $t/$Tend")
             end
         end
@@ -181,17 +200,27 @@ function linear_SWE(order,degree)
             #pvd[0.0] = createvtk(Ω,joinpath(dir,"linear_topo0.0.vtu"),cellfields=["u"=>un,"h"=>(hn)])
             for (x,t) in s_h
                 u_h,h_h = x
-                eh = h_h - h(t)
-                eu = u_h - u(t)
+                eh = (h_h - h(t))
+                eu = (u_h - u(t))
                 pvd[t] = createvtk(Ω,joinpath(dir,"linear$t.vtu"),cellfields=["u"=>u_h,"h"=>h_h, "eh"=>eh, "eu"=>eu, "um"=>u(t), "hm"=>h(t)])#, "um"=>u(t), "hm"=>h(t)
                 println("done $t/$Tend")
             end
         end
     end
+
+    plot(t_base,[eul2, ehl2, h_c],
+    label=["L2_u" "L2_h" "e_rel"],
+    shape=:auto,
+    xlabel="time",ylabel="error norm")
+
+    plot(t_base,[h_c],
+    label=["h_rel"],
+    shape=:auto,
+    xlabel="time",ylabel="error norm")
 end
 
 # function h₀((x,y))
-#     h = 0.5 + 0.05*exp(-0.01*(x-50)^2 -0.01*(y-25)^2)
+#     h = 0.0 #0.5 + 0.05*exp(-0.01*(x-50)^2 -0.01*(y-25)^2)
 #     h
 # end
 
@@ -201,20 +230,11 @@ end
 #     u
 # end
 
-# function fu1_res((x, y), t)
-#     H_const = H
-#     u_res = VectorValue(π*cos(π*t) - 2*H_const*π*cos(π*x)*sin(π*x)*sin(π*y)*exp(t) + 2*H_const*π*cos(π*x)*sin(π*x)*sin(π*y) - H_const*π*cos(π*x)*sin(π*y)*exp(t)*cos(π*y) + H_const*π*cos(π*x)*sin(π*y)*cos(π*y) - H_const*π*cos(π*x)*sin(π*y)*sin(π*t)*exp(t) + H_const*π*cos(π*x)*sin(π*y)*sin(π*t) - 2*H_const*π*cos(π*y)*sin(π*x)*sin(π*y)*exp(t) + 2*H_const*π*cos(π*y)*sin(π*x)*sin(π*y) - H_const*sin(π*x)*π*cos(π*y)*exp(t)*cos(π*x) + H_const*sin(π*x)*π*cos(π*y)*cos(π*x) - H_const*sin(π*x)*π*cos(π*y)*sin(π*t)*exp(t) + H_const*sin(π*x)*π*cos(π*y)*sin(π*t), S2 = -π*cos(π*t)*sin(π*x)*sin(π*y)*exp(t) + π*cos(π*t)*sin(π*x)*sin(π*y) - sin(π*x)*sin(π*y)*exp(t)*cos(π*x) - sin(π*x)*sin(π*y)^2*exp(t) - sin(π*x)*sin(π*y)*exp(t)*sin(π*t) - f*sin(π*x)^2*sin(π*y)*exp(t) + f*sin(π*x)^2*sin(π*y) - f*sin(π*x)*sin(π*y)*exp(t)*cos(π*y) + f*sin(π*x)*sin(π*y)*cos(π*y) - f*sin(π*x)*sin(π*y)*sin(π*t)*exp(t) + f*sin(π*x)*sin(π*y)*sin(π*t) + g*π*cos(π*y))
-#     u_res
+# function forcefunc((x,y),t)
+#     f = VectorValue(F*g*cos(F*x)*sin(G*y)*sin(C*t)+C*sin(A*x)*sin(B*y)*cos(C*t),
+#     G*g*sin(F*x)*cos(G*y)*sin(C*t)+C*sin(A*x)*cos(E*(y-yref))*cos(C*t))
+#     f
 # end
 
-# function fh_res(x, y, t)
-#     H_const = H
-#     h_res = π*cos(π*t) - 2*H_const*π*cos(π*x)*sin(π*x)*sin(π*y)*exp(t) + 2*H_const*π*cos(π*x)*sin(π*x)*sin(π*y) - H_const*π*cos(π*x)*sin(π*y)*exp(t)*cos(π*y) + H_const*π*cos(π*x)*sin(π*y)*cos(π*y) - H_const*π*cos(π*x)*sin(π*y)*sin(π*t)*exp(t) + H_const*π*cos(π*x)*sin(π*y)*sin(π*t) - 2*H_const*π*cos(π*y)*sin(π*x)*sin(π*y)*exp(t) + 2*H_const*π*cos(π*y)*sin(π*x)*sin(π*y) - H_const*sin(π*x)*π*cos(π*y)*exp(t)*cos(π*x) + H_const*sin(π*x)*π*cos(π*y)*cos(π*x) - H_const*sin(π*x)*π*cos(π*y)*sin(π*t)*exp(t) + H_const*sin(π*x)*π*cos(π*y)*sin(π*t)
-#     h_res
-# end
 
-# function u_man(t, (x, y))
-#     u_man = VectorValue((sin(π*x) + cos(π*y) + sin(π*t))*sin(π*x)*sin(π*y)*(-exp(t) + 1))
-
-# end
-linear_SWE(0,3)
+linear_SWE(1,4)
