@@ -19,7 +19,7 @@ using Gridap.TensorValues: meas
 function uD(u₀,D₀,F₀,q₀,X,Y,dΩ)
     a((u,D,r,u2),(w,ϕ,ϕ2,w2)) = ∫(w⋅u + ϕ*D + w2⋅u2 + ϕ2*r)dΩ
     b((w,ϕ,ϕ2,w2)) = ∫(w⋅u₀ + ϕ*D₀ + w2⋅F₀ + q₀*ϕ2)dΩ
-    solve(AffineFEOperator(a,b,X,Y))
+    solve(AffineFEOperator(a,b,X(0.0),Y))
 end
 
 function compute_mass_flux!(F,dΩ,V,RTMMchol,u)
@@ -40,9 +40,9 @@ clone_fe_function(space,f)=FEFunction(space,copy(get_free_dof_values(f)))
 
 function setup_and_factorize_mass_matrices(dΩ, R, S, U, V, P, Q)
     amm(a,b) = ∫(a⋅b)dΩ
-    H1MM = assemble_matrix(amm, R, S)
-    RTMM = assemble_matrix(amm, U, V)
-    L2MM = assemble_matrix(amm, P, Q)
+    H1MM = assemble_matrix(amm, R(0.0), S)
+    RTMM = assemble_matrix(amm, U(0.0), V)
+    L2MM = assemble_matrix(amm, P(0.0), Q)
     H1MMchol = lu(H1MM)
     RTMMchol = lu(RTMM)
     L2MMchol = lu(L2MM)
@@ -89,16 +89,18 @@ function APVM_run(order,degree,D₀,u₀,topography,forcefunc,dir,periodic::Bool
     end
     nΓ = get_normal_vector(Γ)
     dΓ = Measure(Γ,degree)
-    
+
+    udc(x,t::Real) = VectorValue(0.0,0.0)
+    udc(t::Real) = x -> udc(x,t)
     #Make FE spaces
     if periodic
         reffe_rt = ReferenceFE(raviart_thomas,Float64,order)#
         V = TestFESpace(model,reffe_rt;conformity=:HDiv,dirichlet_tags=DC)#
-        U = TransientTrialFESpace(V)
+        U = TransientTrialFESpace(V,[udc,udc])
     else
         reffe_rt = ReferenceFE(raviart_thomas,Float64,order)
         V = TestFESpace(model,reffe_rt;conformity=:HDiv,dirichlet_tags=DC)#
-        U = TransientTrialFESpace(V)
+        U = TransientTrialFESpace(V,[udc,udc])
     end
 
     reffe_lgn = ReferenceFE(lagrangian,Float64,order)
@@ -112,25 +114,20 @@ function APVM_run(order,degree,D₀,u₀,topography,forcefunc,dir,periodic::Bool
     H1MM, RTMM, L2MM, H1MMchol, RTMMchol, L2MMchol = setup_and_factorize_mass_matrices(dΩ,R,S,U,V,P,Q)
 
     Y = MultiFieldFESpace([V,Q,S,V])
-    X = MultiFieldFESpace([U,P,R,U])
+    X = TransientMultiFieldFESpace([U,P,R,U])
 
     #Create initial solutions
     #u, velocity
-    a1(u,v) = ∫(v⋅u)dΩ
-    l1(v) = ∫(v⋅u₀)dΩ
-    un = solve(AffineFEOperator(a1,l1,U,V))
+    un = interpolate_everywhere(u₀,U(0.0))
+
     #h, fluid depth
-    a2(u,v) = ∫(v*u)dΩ
-    l2(v) = ∫(v*D₀)dΩ
-    Dn = solve(AffineFEOperator(a2,l2,P,Q))
+    Dn = interpolate_everywhere(D₀,P(0.0))
+
     #b, topography
-    a3(u,v) = ∫(v*u)dΩ
-    l3(v) = ∫(v*topography)dΩ
-    b = solve(AffineFEOperator(a3,l3,P,Q))
+    h = interpolate_everywhere(topography,Q(0.0))
+
     #Constant FE space with the coriolis parameter, possibly can be removed.
-    a4(u,v)=∫(v*u)dΩ
-    l4(v)=∫(v*f)dΩ
-    fn=solve(AffineFEOperator(a4,l4,R,S))
+    fn = interpolate_everywhere(f,S(0.0))
 
     #Build and compute initial potential vorticity
     q₀ = clone_fe_function(R,fn)
@@ -152,33 +149,33 @@ function APVM_run(order,degree,D₀,u₀,topography,forcefunc,dir,periodic::Bool
     dnorm(u,du) = u ⋅ du / norm(u)
 
     #Define residual, jacobian in space and time
-    res(t,(u,D,q,F),(w,ϕ,ϕ2,w2)) = ∫(∂t(u)⋅w + ((q-τ*(u⋅∇(q)))*(perp∘(F)))⋅w - (∇⋅(w))*(g*(D+b) + 0.5*(u⋅u)) + ∂t(D)*ϕ + w2⋅(F-u*D) + ϕ2*(q*D) +  (perp∘(∇(ϕ2)))⋅u - (ϕ2*fn) + ϕ*(∇⋅(F))- forcfunc(t)⋅w + ((cd*(norm(u))*u)/(D+b+1e-14))⋅w)dΩ + ∫((g*(D+b) + 0.5*(u⋅u))*(w⋅nΓ) + nΓ⋅(perp∘(u))*ϕ2)dΓ 
-    jac(t,(u,D,q,F),(du,dD,dq,dF),(w,ϕ,ϕ2,w2)) = ∫(((dq - τ*(u⋅∇(dq) + du⋅∇(q)))*(perp∘(F)))⋅w + ((q-τ*(u⋅∇(q)))*(perp∘(dF)))⋅w - (∇⋅(w))*(g*(dD) + (du⋅u)) + w2⋅(dF - du*D - dD*u) + ϕ2*(q*dD) + ϕ2*(dq*D) + du⋅(perp∘(∇(ϕ2))) + ϕ*(∇⋅(dF)) + (cd*(dnorm(u,du)*u)/(D+b+1e-14) + cd*(norm(u)/(D+b+1e-14)*du) + cd*(norm(u)*u*D)/((D+b+1e-14)*(D+b+1e-14)))⋅w )dΩ+ ∫((g*(dD) + (du⋅u))*(w⋅nΓ) + nΓ⋅(perp∘(du))*ϕ2)dΓ
+    res(t,(u,D,q,F),(w,ϕ,ϕ2,w2)) = ∫(∂t(u)⋅w + ((q-τ*(u⋅∇(q)))*(perp∘(F)))⋅w - (∇⋅(w))*(g*(D+h) + 0.5*(u⋅u)) + ∂t(D)*ϕ + w2⋅(F-u*D) + ϕ2*(q*D) +  (perp∘(∇(ϕ2)))⋅u - (ϕ2*fn) + ϕ*(∇⋅(F))- forcfunc(t)⋅w + ((cd*(norm(u))*u)/(D+1e-14))⋅w)dΩ + ∫((g*(D+h) + 0.5*(u⋅u))*(w⋅nΓ) + nΓ⋅(perp∘(u))*ϕ2)dΓ 
+    jac(t,(u,D,q,F),(du,dD,dq,dF),(w,ϕ,ϕ2,w2)) = ∫(((dq - τ*(u⋅∇(dq) + du⋅∇(q)))*(perp∘(F)))⋅w + ((q-τ*(u⋅∇(q)))*(perp∘(dF)))⋅w - (∇⋅(w))*(g*(dD) + (du⋅u)) + w2⋅(dF - du*D - dD*u) + ϕ2*(q*dD) + ϕ2*(dq*D) + du⋅(perp∘(∇(ϕ2))) + ϕ*(∇⋅(dF)) + (cd*(dnorm(u,du)*u)/(D+h+1e-14) + cd*(norm(u)/(D+h+1e-14)*du) - cd*(norm(u)*u*dD)/((D+h+1e-14)*(D+h+1e-14)))⋅w )dΩ+ ∫((g*(dD) + (du⋅u))*(w⋅nΓ) + nΓ⋅(perp∘(du))*ϕ2)dΓ
     jac_t(t,(u,D),(dut,dDt),(w,ϕ)) = ∫(dut⋅w + dDt*ϕ)dΩ
 
     #Define operators and solvers
     op = TransientFEOperator(res,jac,jac_t,X,Y)
-    nls = NLSolver(show_trace=true,linesearch=BackTracking())
+    nls = LUSolver()#NLSolver(show_trace=true,linesearch=BackTracking())
     ode_solver = ThetaMethod(nls,dt,0.5)
     x = solve(ode_solver,op,uDn,T0,Tend)
 
     #Output results
     if isdir(dir)
         output_file = paraview_collection(joinpath(dir,"nonlinear_topo"))do pvd
-            pvd[0.0] = createvtk(Ω,joinpath(dir,"nonlinear_topo0.0.vtu"),cellfields=["u"=>un,"D"=>(Dn+b),"b"=>b])
+            pvd[0.0] = createvtk(Ω,joinpath(dir,"nonlinear_topo0.0.vtu"),cellfields=["u"=>un,"D"=>(Dn+h),"h"=>h])
             for (x,t) in x
                 u,D,F = x
-                pvd[t] = createvtk(Ω,joinpath(dir,"nonlinear_topo$t.vtu"),cellfields=["u"=>u,"D"=>(D+b),"b"=>b])
+                pvd[t] = createvtk(Ω,joinpath(dir,"nonlinear_topo$t.vtu"),cellfields=["u"=>u,"D"=>(D+h),"h"=>h])
                 println("done $t/$Tend")
             end
         end
     else
         mkdir(dir)
         output_file = paraview_collection(joinpath(dir,"nonlinear_topo")) do pvd
-            pvd[0.0] = createvtk(Ω,joinpath(dir,"nonlinear_topo0.0.vtu"),cellfields=["u"=>un,"D"=>(Dn+b),"b"=>b])
+            pvd[0.0] = createvtk(Ω,joinpath(dir,"nonlinear_topo0.0.vtu"),cellfields=["u"=>un,"D"=>(Dn+h),"h"=>h])
             for (x,t) in x
                 u,D,F = x
-                pvd[t] = createvtk(Ω,joinpath(dir,"nonlinear_topo$t.vtu"),cellfields=["u"=>u,"D"=>(D+b),"b"=>b])
+                pvd[t] = createvtk(Ω,joinpath(dir,"nonlinear_topo$t.vtu"),cellfields=["u"=>u,"D"=>(D+h),"h"=>h])
                 println("done $t/$Tend")
             end
         end
@@ -234,4 +231,4 @@ Periodic    = if true periodic in y-dir
 Tend        = Total runtime
 dt          = Time setup
 =#
-APVM_run(0,4,D₀,u₀,topography,forcfunc,joinpath(outputdir,dir),true,100.0,1.0,model)
+APVM_run(1,4,D₀,u₀,topography,forcfunc,joinpath(outputdir,dir),true,100.0,1.0,model)
