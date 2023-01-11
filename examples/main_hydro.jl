@@ -50,7 +50,7 @@ function swec_run()
     
     # This is the part where the actual simulation happens 
     spinup(workingArrays,Pars,2;verbose=true) # spin up for 2 tidal cycles (i.e., run swec twice without saving)
-    ProfileView.@profview SWEC(workingArrays,Pars);                 # integrate ζ,u,v,c in time.
+    SWEC(workingArrays,Pars);                 # integrate ζ,u,v,c in time.
 end
 #rm("output/test",recursive=true)
 
