@@ -65,7 +65,7 @@ end
 Generate arched mesh based on coordinates and triangle size. 
 Parameters:
     inner radius: Inner Radius of the arc (similar to curvature)
-    width: Width of in canal
+    width: Width of in river
     filename: Name of the mesh file 
     modelname: Name of the model 
     lc: The size of the triangles, default is 1e-2. 
@@ -119,6 +119,18 @@ function generate_arc_mesh(innerradius::Float32, width::Float32, filename::Strin
     gmsh.finalize()
 end
 
+
+"""
+Generate canal mesh based on length and width and triangle size. 
+Parameters:
+    Lx: Maximum width of canal
+    Ly: Length of canal
+    filename: Name of the mesh file 
+    modelname: Name of the model 
+    lc: The size of the triangles, default is 1e-2. 
+    periodic: Whether the top and bottom of arc is periodic 
+Creates a <filename>.msh in the meshes folder.
+""" 
 function generate_outlet_mesh(Lx::Float32, Ly::Float32, filename::String, modelname::String, lc::Float32, periodic::Bool)
     # Initialise mesh generator 
     gmsh.initialize()
@@ -144,8 +156,6 @@ function generate_outlet_mesh(Lx::Float32, Ly::Float32, filename::String, modeln
     # Create the closed curve loop and the surface
     loop = gmsh.model.geo.add_curve_loop([l1, l2, l3, l4])
     surf = gmsh.model.geo.add_plane_surface([loop])
-
-    gmsh.model.geo.synchronize()
 
     gmsh.model.geo.synchronize()
 
