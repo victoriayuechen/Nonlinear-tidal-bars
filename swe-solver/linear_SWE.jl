@@ -16,14 +16,10 @@ end
 function uζ(u₀,ζ₀,X,Y,dΩ)
     a((u,ζ),(w,ϕ)) = ∫(w⋅u +ϕ*ζ)dΩ
     b((w,ϕ)) = ∫(w⋅u₀ + ϕ*ζ₀)dΩ
-function uζ(u₀,ζ₀,X,Y,dΩ)
-    a((u,ζ),(w,ϕ)) = ∫(w⋅u +ϕ*ζ)dΩ
-    b((w,ϕ)) = ∫(w⋅u₀ + ϕ*ζ₀)dΩ
     solve(AffineFEOperator(a,b,X,Y))
 end
 
 
-function run_linear_SWE(order,degree,ζ₀,u₀,forcefunc)
 function run_linear_SWE(order,degree,ζ₀,u₀,forcefunc)
 
     #Parameters 
@@ -34,7 +30,7 @@ function run_linear_SWE(order,degree,ζ₀,u₀,forcefunc)
     H = 0.5 #Constant layer depth at rest
 
     # Generate the model
-    model = GmshDiscreteModel("swe-solver/meshes/arc-larger.msh")
+    model = GmshDiscreteModel("swe-solver/meshes/100x100periodic.msh")
     DC = ["left","right"]
     dir = "swe-solver/output_linear_swe"
     Ω = Triangulation(model)
@@ -71,12 +67,10 @@ function run_linear_SWE(order,degree,ζ₀,u₀,forcefunc)
     res(t,(u,ζ),(w,ϕ)) = ∫(∂t(u)⋅w + w⋅(f*(perp∘(u))) - (∇⋅(w))*g*ζ + ∂t(ζ)*ϕ + ϕ*H*(∇⋅(u)) - forcefunc_x(t)⋅w)dΩ
     jac(t,(u,ζ),(du,dζ),(w,ϕ)) = ∫(w⋅(f*(perp∘(du))) - (∇⋅(w))*g*dζ + ϕ*(H*(∇⋅(du))))dΩ
     jac_t(t,(u,ζ),(dut,dζt),(w,ϕ)) = ∫(dut⋅w + dζt*ϕ)dΩ
-    res(t,(u,ζ),(w,ϕ)) = ∫(∂t(u)⋅w + w⋅(f*(perp∘(u))) - (∇⋅(w))*g*ζ + ∂t(ζ)*ϕ + ϕ*H*(∇⋅(u)) - forcefunc_x(t)⋅w)dΩ
-    jac(t,(u,ζ),(du,dζ),(w,ϕ)) = ∫(w⋅(f*(perp∘(du))) - (∇⋅(w))*g*dζ + ϕ*(H*(∇⋅(du))))dΩ
-    jac_t(t,(u,ζ),(dut,dζt),(w,ϕ)) = ∫(dut⋅w + dζt*ϕ)dΩ
+
 
     op = TransientFEOperator(res,jac,jac_t,X,Y)
-    nls = NLSolver(show_trace=true,linesearch=BackTracking())
+    nls = LUSolver()#NLSolver(show_trace=true,linesearch=BackTracking())
     Tend = 50
     ode_solver = ThetaMethod(nls,0.5,0.5)
     x = solve(ode_solver,op,x0,0.0,Tend)
@@ -84,8 +78,6 @@ function run_linear_SWE(order,degree,ζ₀,u₀,forcefunc)
     if isdir(dir)
         output_file = paraview_collection(joinpath(dir,"linear_topo"))do pvd
             for (x,t) in x
-                u,ζ = x
-                pvd[t] = createvtk(Ω,joinpath(dir,"linear_topo$t.vtu"),cellfields=["u"=>u,"ζ"=>(ζ+H)])
                 u,ζ = x
                 pvd[t] = createvtk(Ω,joinpath(dir,"linear_topo$t.vtu"),cellfields=["u"=>u,"ζ"=>(ζ+H)])
                 println("done $t/$Tend")
@@ -97,15 +89,14 @@ function run_linear_SWE(order,degree,ζ₀,u₀,forcefunc)
             for (x,t) in x
                 u,ζ = x
                 pvd[t] = createvtk(Ω,joinpath(dir,"linear_topo$t.vtu"),cellfields=["u"=>u,"ζ"=>(ζ+H)])
-                u,ζ = x
-                pvd[t] = createvtk(Ω,joinpath(dir,"linear_topo$t.vtu"),cellfields=["u"=>u,"ζ"=>(ζ+H)])
                 println("done $t/$Tend")
             end
         end
     end
 end
+
 function ζ₀((x,y))
-    h =0.01*exp(-0.1*(x-150)^2 -0.1*(y-30)^2)
+    h =0.01*exp(-0.1*(x-50)^2 -0.1*(y-30)^2)
     h
 end
 
@@ -116,7 +107,7 @@ function u₀((x,y))
 end
 
 function forcefunc((x,y),t)
-    f = VectorValue(0.0,0.0*0.5*cos(π*(1/5)*t))
+    f = VectorValue(0.0,0.0*cos(π*(1/5)*t))
     f
 end
 
