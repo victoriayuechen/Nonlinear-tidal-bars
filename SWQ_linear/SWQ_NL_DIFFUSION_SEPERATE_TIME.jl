@@ -61,7 +61,7 @@ function dfunc_g(t,(u,ζ),(du,dζ),(w,ϕ))
 end
 
 #Forcing function
-function func_Fₚ(t,(u,ζ),(w,ϕ),f,U_start) 
+function func_Fₚ(t,(u,ζ),(w,ϕ)) 
     Fₚ = - forcfunc(t)⋅w
     return Fₚ
 end
@@ -285,6 +285,6 @@ dt = 5
 Tstart = 0
 Tend = 50
 @time x = solver(Initial_solutions, latitude, Y, X, dt, Tstart, Tend, dΩ, dΓ, nΓ, h, false)
-
+dir = "./test"
 @time writing_output(dir, x, Ω)
 @time writing_output(dir, x, Ω)
