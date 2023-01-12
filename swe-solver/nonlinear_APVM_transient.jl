@@ -22,33 +22,20 @@ function uD(u₀,D₀,F₀,q₀,X,Y,dΩ)
     solve(AffineFEOperator(a,b,X(0.0),Y))
 end
 
-function compute_mass_flux!(F,dΩ,V,RTMMchol,u)
-    b(v) = ∫(v⋅u)dΩ
-    Gridap.FESpaces.assemble_vector!(b, get_free_dof_values(F), V)
-    ldiv!(RTMMchol,get_free_dof_values(F))
+function compute_mass_flux(F,U,V,dΩ)
+    a(DU,w) = ∫(DU⋅w)dΩ
+    b(w) = ∫(w⋅F)dΩ
+    solve(AffineFEOperator(a,b,U(0.0),V))
 end
 
-function compute_potential_vorticity!(q,H1h,H1hchol,dΩ,R,S,D,u,f)
+function compute_potential_vorticity(D,f,u,R,S,dΩ)
     a(r,s) = ∫(s*D*r)dΩ
     c(s)   = ∫(perp∘(∇(s))⋅(u) + s*f)dΩ
-    Gridap.FESpaces.assemble_matrix_and_vector!(a, c, H1h, get_free_dof_values(q), R, S)
-    lu!(H1hchol, H1h)
-    ldiv!(H1hchol, get_free_dof_values(q))
+    solve(AffineFEOperator(a,c,R(0.0),S))
 end
 
 clone_fe_function(space,f)=FEFunction(space,copy(get_free_dof_values(f)))
 
-function setup_and_factorize_mass_matrices(dΩ, R, S, U, V, P, Q)
-    amm(a,b) = ∫(a⋅b)dΩ
-    H1MM = assemble_matrix(amm, R(0.0), S)
-    RTMM = assemble_matrix(amm, U(0.0), V)
-    L2MM = assemble_matrix(amm, P(0.0), Q)
-    H1MMchol = lu(H1MM)
-    RTMMchol = lu(RTMM)
-    L2MMchol = lu(L2MM)
-  
-    H1MM, RTMM, L2MM, H1MMchol, RTMMchol, L2MMchol
-  end
 
 function new_vtk_step(Ω,file,_cellfields)
     n = size(_cellfields)[1]
@@ -66,17 +53,17 @@ function Gridap.get_free_dof_values(functions...)
 end
 
 
-function APVM_run(order,degree,D₀,u₀,topography,forcefunc,dir,periodic::Bool,Tend,dt,model)
+function APVM_run(order,degree,D₀,u₀,topography,forcefunc,dir,periodic::Bool,Tend,dt,model,DC)
     #Parameters
     latitude = 52 #Latitude of the model being analysed
     η = 7.29e-5
     f = 2*η*sin(latitude*(π/180))
-    cd = 0.025
+    cd = 0.0025
     g = 9.81
     T0 = 0.0
     τ = dt*0.5
     
-    DC = ["shore_top","shore_bot","island","outlet_left"]
+
 
     #Make triangulations and boundaries
     Ω = Triangulation(model)
@@ -99,11 +86,11 @@ function APVM_run(order,degree,D₀,u₀,topography,forcefunc,dir,periodic::Bool
     if periodic
         reffe_rt = ReferenceFE(raviart_thomas,Float64,order)#
         V = TestFESpace(model,reffe_rt;conformity=:HDiv,dirichlet_tags=DC)#
-        U = TransientTrialFESpace(V,[udc,udc,udc,uda])
+        U = TransientTrialFESpace(V,[udc,udc])
     else
         reffe_rt = ReferenceFE(raviart_thomas,Float64,order)
         V = TestFESpace(model,reffe_rt;conformity=:HDiv,dirichlet_tags=DC)#
-        U = TransientTrialFESpace(V,[udc,udc,udc,uda])
+        U = TransientTrialFESpace(V,[udc,udc])
     end
 
     reffe_lgn = ReferenceFE(lagrangian,Float64,order)
@@ -114,7 +101,6 @@ function APVM_run(order,degree,D₀,u₀,topography,forcefunc,dir,periodic::Bool
     S = TestFESpace(model, reffe_lgn;conformity=:H1)#
     R = TransientTrialFESpace(S)
 
-    H1MM, RTMM, L2MM, H1MMchol, RTMMchol, L2MMchol = setup_and_factorize_mass_matrices(dΩ,R,S,U,V,P,Q)
 
     Y = MultiFieldFESpace([V,Q,S,V])
     X = TransientMultiFieldFESpace([U,P,R,U])
@@ -133,12 +119,11 @@ function APVM_run(order,degree,D₀,u₀,topography,forcefunc,dir,periodic::Bool
     fn = interpolate_everywhere(f,S(0.0))
 
     #Build and compute initial potential vorticity
-    q₀ = clone_fe_function(R,fn)
-    compute_potential_vorticity!(q₀,H1MM,H1MMchol,dΩ,R,S,Dn,un,fn)
+    q₀ = compute_potential_vorticity(D₀,f,u₀,R,S,dΩ)
 
     #Build and compute initial mass flux
-    F₀ = clone_fe_function(V,un)
-    compute_mass_flux!(F₀,dΩ,V,RTMMchol,un*Dn)
+    F₀ = compute_mass_flux(un*Dn,U,V,dΩ)
+
     
     #Solve whole coupled system with the initial values
     uDn = uD(un,Dn,F₀,q₀,X,Y,dΩ)
@@ -158,7 +143,7 @@ function APVM_run(order,degree,D₀,u₀,topography,forcefunc,dir,periodic::Bool
 
     #Define operators and solvers
     op = TransientFEOperator(res,jac,jac_t,X,Y)
-    nls = NLSolver(show_trace=true,method =:newton,linesearch=BackTracking())
+    nls =NLSolver(show_trace=true,method =:newton,linesearch=BackTracking())
     ode_solver = ThetaMethod(nls,dt,0.5)
     x = solve(ode_solver,op,uDn,T0,Tend)
 
@@ -189,12 +174,12 @@ end
 
 #Variable functions to be used to setup model, used for local tests
 function D₀((x,y))
-    Dout = -topography((x,y)) +  0.5 + 0.0*exp(-0.01*(x-50)^2 -0.01*(y-25)^2)
+    Dout = -topography((x,y)) +  0.5 + 0.01*exp(-0.01(x-50)^2 - 0.01*(y-30)^2)
     Dout
 end
 
 function topography((x,y))
-    p = 0.0
+    p =  0.1 * cos(π/B * x) * cos(2π/L * y)
     p
 end
 
@@ -204,12 +189,18 @@ function u₀((x,y))
 end
 
 function forcfunc((x,y),t)
-    f = VectorValue(0.0,0.0*0.5*cos(π*(1/50)*t))
+    U_start =  0.5 
+    η = 7.29e-5
+    latitude = 52
+    cD = 0.0025
+    f = 2*η*sin(latitude*(π/180))
+    σ = 2*pi/44700
+    f = VectorValue(0.0,0.0)#VectorValue(-f*U_start*cos(σ*t),-σ*U_start*sin(σ*t)+cD*abs(U_start*cos(σ*t))*U_start*cos(σ*t)) 
     f
 end
 
 outputdir = "output_swe"
-dir = "schelde_test"
+dir = "NL_SWE_APVM_test"
 if !isdir(outputdir)
     mkdir(outputdir)
 end
@@ -218,8 +209,20 @@ if !isdir(joinpath(outputdir,dir))
     mkdir(joinpath(outputdir,dir))
 end
 
-model = GmshDiscreteModel("swe-solver/meshes/schelde_mesh.msh")
-
+B = 100
+L = 100
+partition = (50,50)
+domain = (0,B,0,L)
+model = CartesianDiscreteModel(domain,partition;isperiodic=(false,true)) 
+labels = get_face_labeling(model)
+add_tag_from_tags!(labels,"bottom",[1,2,5])
+add_tag_from_tags!(labels,"left",[7])
+add_tag_from_tags!(labels,"right",[8])
+add_tag_from_tags!(labels,"top",[3,4,6])
+add_tag_from_tags!(labels,"inside",[9])
+DC = ["left","right"]
+Tend = 50
+dt = 0.5
 #=
 Input:
 order       = order of FE polynomials
@@ -234,4 +237,4 @@ Periodic    = if true periodic in y-dir
 Tend        = Total runtime
 dt          = Time setup
 =#
-APVM_run(1,4,D₀,u₀,topography,forcfunc,joinpath(outputdir,dir),true,60*60*6,120,model)
+APVM_run(1,4,D₀,u₀,topography,forcfunc,joinpath(outputdir,dir),true,Tend,dt,model,DC)
