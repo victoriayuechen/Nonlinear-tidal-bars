@@ -16,14 +16,14 @@ using WriteVTK
 using LinearAlgebra
 using LineSearches: BackTracking
 using Gridap.TensorValues: meas
+using CSV, DelimitedFiles
 
 
 #function to solve the equations
 function Shallow_water_equations_newton_solver(
-        order,degree,Tend,dt,B,L,x_points,y_points,dir)
+        order,degree,Tend,dt,B,L,x_points,y_points,dir,show_result,latitude,ζ₀,u₀,h₀)
 
     #''''''''''''''Parameters from Hepkema''''''''''''''##
-    latitude = 52                           #latitude                               (°)
     η = 7.29e-5                             #angular speed of Earth rotation        (s^(-1))
     f = 2*η*sin(latitude*(π/180))           #coriolis parameter                     (s^(-1))
     g = 9.81                                #Gravitational constant                 (ms^(-2))
@@ -38,7 +38,7 @@ function Shallow_water_equations_newton_solver(
 
     ##''''''''''''''Functions''''''''''''''##
     coriolis(u) = f*VectorValue(u[2],-u[1])                                                                             #coriolis
-    forcfunc(t) = VectorValue(-f*U_start*cos(σ*t),-σ*U_start*sin(σ*t)+cD*abs(U_start*cos(σ*t))*U_start*cos(σ*t)/H)      #Fₚ from Hepkema
+    forcfunc(t) = VectorValue(-f*U_start*cos(σ*t),-σ*U_start*sin(σ*t)+cD*abs(U_start*cos(σ*t))*U_start*cos(σ*t))      #Fₚ from Hepkema
 
     #''''''''''''''Make model''''''''''''''##
     domain = (0,B,0,L)                      #Original x and y flipped
@@ -78,14 +78,10 @@ function Shallow_water_equations_newton_solver(
 
     ##''''''''''''''Initial solution of ζ''''''''''''''##
     #ζ₀(x,t) = 0.05*exp(-0.01*(x[1]-50)^2 - 0.01*(x[2]-25)^2)           #Druppel
-    ζ₀(x,t) = 0.0                                                       #Hepkema original initial solution
-    ζ₀(t::Real) = x->ζ₀(x,t)
+    
 
     ##''''''''''''''Initial solution of u''''''''''''''##
-    #u₀(x,t) = VectorValue(0.0,0.0)                                     #Hepkema original initial solution
-    u₀(x,t) = VectorValue(0.0,U_start)                                  #Maybe better initial solution
-    u₀(t::Real) = x->u₀(x,t)
-
+    
     #Interpolate initial solution
     uhn = interpolate_everywhere([u₀(0.0),ζ₀(0.0)],X(0.0))
 
@@ -96,8 +92,7 @@ function Shallow_water_equations_newton_solver(
     #Different vertical bottoms:
     #h₀(x,t) = 0.8*(exp(-0.001*(x[2]-L/4)^2)+exp(-0.001*(x[2]-L/3)^2)+exp(-0.001*(x[2]-L/2)^2)+exp(-0.001*(x[2]-L/3*2)^2)+exp(-0.001*(x[2]-L/4*3)^2))
     #River bottom
-    h₀(x,t) = exp(-0.000002*(x[1])^2 - 0.000002*(x[2]-L*0.8)^2) + exp(-0.000002*(x[1])^2 - 0.000002*(x[2]-L*0.4)^2) + exp(-0.000002*(x[1]-B)^2 - 0.000002*(x[2]-L*0.6)^2) + exp(-0.000002*(x[1]-B)^2 - 0.000002*(x[2]-L*0.2)^2)
-    h₀(t::Real) = x->h₀(x,t)
+    #h₀(x,t) = exp(-0.000002*(x[1])^2 - 0.000002*(x[2]-L*0.8)^2) + exp(-0.000002*(x[1])^2 - 0.000002*(x[2]-L*0.4)^2) + exp(-0.000002*(x[1]-B)^2 - 0.000002*(x[2]-L*0.6)^2) + exp(-0.000002*(x[1]-B)^2 - 0.000002*(x[2]-L*0.2)^2)
     h = interpolate_everywhere(h₀(0.0),P(0.0))
     
 
@@ -115,7 +110,7 @@ function Shallow_water_equations_newton_solver(
 
     #Drag coefficient term
     func_cD(t,(u,ζ),(w,ϕ)) = cD* (meas∘u) * u⋅w/(ζ+H-h)
-    dfunc_cD(t,(u,ζ),(du,dζ),(w,ϕ)) = cD/(ζ+H-h)*w⋅((meas∘u)*u*dζ/(ζ+H-h)+u⋅du*u/((meas∘(u+1e-14))) + (meas∘u)*du)
+    dfunc_cD(t,(u,ζ),(du,dζ),(w,ϕ)) = cD/(ζ+H-h)*w⋅(-(meas∘u)*u*dζ/(ζ+H-h)+u⋅du*u/((meas∘(u+1e-14))) + (meas∘u)*du)
 
     #Gravitational (without boundary)
     func_g(t,(u,ζ),(w,ϕ)) = - g*(∇⋅(w))*ζ
@@ -166,7 +161,7 @@ function Shallow_water_equations_newton_solver(
         dfunc_cD(t,(u,ζ),(du,dζ),(w,ϕ))  +                              #Drag coefficient term
         dfunc_g(t,(u,ζ),(du,dζ),(w,ϕ))   +                              #Gravitational
         dfunc_h(t,(u,ζ),(du,dζ),(w,ϕ))   +                              #ζ+Velocity function
-        dfunc_stabζ(t,(u,ζ),(du,dζ),(w,ϕ)) +                             #Stabilization ζ
+        dfunc_stabζ(t,(u,ζ),(du,dζ),(w,ϕ)) +                            #Stabilization ζ
         dfunc_stabu(t,(u,ζ),(du,dζ),(w,ϕ)))dΩ +                         #Stabilization u
         ∫(dfunc_boun(t,(u,ζ),(du,dζ),(w,ϕ)))dΓ                          #Boundary
 
@@ -175,17 +170,20 @@ function Shallow_water_equations_newton_solver(
 
     ##''''''''''''''Solver with ThetaMethod''''''''''''''##
     op = TransientFEOperator(res,jac,jac_t,X,Y)
-    nls = NLSolver(show_trace=true,linesearch=BackTracking())
+    nls = NLSolver(show_trace=show_result,linesearch=BackTracking())
     ode_solver = ThetaMethod(nls,dt,0.5)
     x = solve(ode_solver,op,uhn,0.0,Tend)  
 
-
+    
     #''''''''''''''Saving''''''''''''''##
     if isdir(dir)
         output_file = paraview_collection(joinpath(dir,"1d-topo-output"))do pvd
             for (x,t) in x
-                u,ζ = x
-                pvd[t] = createvtk(Ω,joinpath(dir,"1d-topo$t.vtu"),cellfields=["u"=>u,"ζ"=>ζ,"h"=>h])
+                if t%(dt*10) ==0
+                    u,ζ = x
+                    pvd[t] = createvtk(Ω,joinpath(dir,"1d-topo$t.vtu"),cellfields=["u"=>u,"ζ"=>ζ,"h"=>h])
+                    println("Saved")
+                end
                 println("done $t/$Tend")
             end
         end
@@ -193,24 +191,16 @@ function Shallow_water_equations_newton_solver(
         mkdir(dir)
         output_file = paraview_collection(joinpath(dir,"1d-topo-output")) do pvd
             for (x,t) in x
-                u,ζ = x
-                pvd[t] = createvtk(Ω,joinpath(dir,"1d-topo$t.vtu"),cellfields=["u"=>u,"ζ"=>ζ,"h"=>h])
+                if t%(dt*10) ==0
+                    u,ζ = x
+                    pvd[t] = createvtk(Ω,joinpath(dir,"1d-topo$t.vtu"),cellfields=["u"=>u,"ζ"=>ζ,"h"=>h])
+                    println("Saved")
+                end
                 println("done $t/$Tend")
             end
         end
     end
 end
-
-##''''''''''''''Variable parameters''''''''''''''##
-order = 1               #Order of the spaces
-degree = 3              #Degree for the boundaries
-Tend = 500              #The total time                              (s)
-dt = 5                  #Time step                                   (s)
-B = 1000                #Channel width                               (m)
-L = 10000               #Channel length                              (m)
-x_points = 20           #Amount of points in the x-direction -> dx = 50 m
-y_points = 100          #Amount of points in the y-direction -> dy = 100 m
-dir = "./RESULTSSL"     #Name of the direction the files get savid in
 
     #=
 ##''''''''''''''Shallow_water_equations_newton_solver input''''''''''''''##
@@ -223,12 +213,61 @@ dir = "./RESULTSSL"     #Name of the direction the files get savid in
     x_points                Amount of points in the x-direction
     y_points                Amount of points in the y-direction
     dir                     Name of the direction the files get savid in
+    show_result             True or false (print show_trace)
+    latitude                Latitude   
+    ζ₀                      Initial solution for ζ as a function of t
+    u₀                      Initial solution for u₀ as a function of t
+    h₀                      Given topography
     =#
 
-#Initialization to speed up second time function is called
-Shallow_water_equations_newton_solver(order,degree,2*dt,dt,B,L,x_points,y_points,dir)
+##''''''''''''''Variable parameters for initial setup''''''''''''''##
+order = 1                                               #Order of the spaces
+degree = 3                                              #Degree for the boundaries
+Tend = 44700                                            #The total time                              (s)
+dt = 5                                                  #Time step                                   (s)
+B = 1000                                                #Channel width                               (m)
+L = 10000                                               #Channel length                              (m)
+x_points = 20                                           #Amount of points in the x-direction -> dx = 50 m 
+y_points = 100                                          #Amount of points in the y-direction -> dy = 100 m 
+dir = "./setup_direction"                               #Name of the direction the files get savid in
+show_results = false                                    #Show the intermediate steps
+latitude = 52                                           #latitude                               (°)
+ζ₀(x,t) = 0.0                                           #Hepkema original initial solution for ζ
+ζ₀(t::Real) = x->ζ₀(x,t)
+u₀(x,t) = VectorValue(0.0,0.0)                          #Hepkema original initial solution for u
+u₀(t::Real) = x->u₀(x,t)
+h₀(x,t) = 0.1 * cos(π/B * x[1]) * cos(2π/L * x[2])      #Hepkema original function for h
+h₀(t::Real) = x->h₀(x,t)
 
-#Real function
-Shallow_water_equations_newton_solver(order,degree,Tend,dt,B,L,x_points,y_points,dir)
+
+##''''''''''''''Initialization to speed up second time function is called''''''''''''''##
+Shallow_water_equations_newton_solver(order,degree,2*dt,dt,B,L,x_points,y_points,dir,show_results,latitude,ζ₀,u₀,h₀)
+
+
+
+##''''''''''''''Variable parameters for the desired problem''''''''''''''##
+order = 1                                               #Order of the spaces
+degree = 3                                              #Degree for the boundaries
+Tend = 44700                                            #The total time                              (s)
+dt = 5                                                  #Time step                                   (s)
+B = 1000                                                #Channel width                               (m)
+L = 10000                                               #Channel length                              (m)
+x_points = 20                                           #Amount of points in the x-direction -> dx = 50 m 
+y_points = 100                                          #Amount of points in the y-direction -> dy = 100 m
+dir = "./RESULTSDiffusion10"                            #Name of the direction the files get savid in
+show_results = false                                    #Show the intermediate results
+latitude = 52                                           #latitude                               (°)
+ζ₀(x,t) = 0.0                                           #Hepkema original initial solution for ζ
+ζ₀(t::Real) = x->ζ₀(x,t)
+u₀(x,t) = VectorValue(0.0,0.0)                          #Hepkema original initial solution for u
+u₀(t::Real) = x->u₀(x,t)
+h₀(x,t) = 0.1 * cos(π/B * x[1]) * cos(2π/L * x[2])      #Hepkema original function for h
+h₀(t::Real) = x->h₀(x,t)
+
+
+##''''''''''''''Real function''''''''''''''##
+Shallow_water_equations_newton_solver(order,degree,Tend,dt,B,L,x_points,y_points,dir,show_results,latitude,ζ₀,u₀,h₀)
+
+
 
 
