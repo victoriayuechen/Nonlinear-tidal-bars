@@ -174,7 +174,7 @@ end
 
 #Variable functions to be used to setup model, used for local tests
 function D₀((x,y))
-    Dout = -topography((x,y)) +  0.5 + 0.01*exp(-0.01(x-50)^2 - 0.01*(y-30)^2)
+    Dout = -topography((x,y)) +  0.5
     Dout
 end
 
@@ -195,7 +195,7 @@ function forcfunc((x,y),t)
     cD = 0.0025
     f = 2*η*sin(latitude*(π/180))
     σ = 2*pi/44700
-    f = VectorValue(0.0,0.0)#VectorValue(-f*U_start*cos(σ*t),-σ*U_start*sin(σ*t)+cD*abs(U_start*cos(σ*t))*U_start*cos(σ*t)) 
+    f = VectorValue(-f*U_start*cos(σ*t),-σ*U_start*sin(σ*t)+cD*abs(U_start*cos(σ*t))*U_start*cos(σ*t)) 
     f
 end
 
@@ -209,20 +209,21 @@ if !isdir(joinpath(outputdir,dir))
     mkdir(joinpath(outputdir,dir))
 end
 
-B = 100
-L = 100
+B = 1000
+L = 10000
 partition = (50,50)
 domain = (0,B,0,L)
-model = CartesianDiscreteModel(domain,partition;isperiodic=(false,true)) 
-labels = get_face_labeling(model)
-add_tag_from_tags!(labels,"bottom",[1,2,5])
-add_tag_from_tags!(labels,"left",[7])
-add_tag_from_tags!(labels,"right",[8])
-add_tag_from_tags!(labels,"top",[3,4,6])
-add_tag_from_tags!(labels,"inside",[9])
+model = GmshDiscreteModel("swe-solver/meshes/1000x10000periodic.msh")
+# model = CartesianDiscreteModel(domain,partition;isperiodic=(false,true)) 
+# labels = get_face_labeling(model)
+# add_tag_from_tags!(labels,"bottom",[1,2,5])
+# add_tag_from_tags!(labels,"left",[7])
+# add_tag_from_tags!(labels,"right",[8])
+# add_tag_from_tags!(labels,"top",[3,4,6])
+# add_tag_from_tags!(labels,"inside",[9])
 DC = ["left","right"]
-Tend = 50
-dt = 0.5
+Tend = 44700
+dt = 480
 #=
 Input:
 order       = order of FE polynomials
