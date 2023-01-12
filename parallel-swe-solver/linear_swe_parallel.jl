@@ -9,6 +9,7 @@ using PartitionedArrays
 using WriteVTK
 using LineSearches: BackTracking
 using GridapPETSc
+using GridapPETSc: PETSC
 
 function perp(u)
     p = VectorValue(-u[2],u[1])
@@ -39,8 +40,21 @@ end
 order = 1
 degree = 4
 
-function run_linear_SWE(parts)
-    options = "-pc_type gamg -ksp_type cg -ksp_monitor -log_view"
+options = """ 
+    -snes_type newtonls
+    -snes_linesearch_type basic
+    -snes_linesearch_damping 1.0
+    -snes_rtol 1.0e-8
+    -snes_atol 0.0
+    -snes_monitor
+    -snes_converged_reason
+    -mm_ksp_type cg
+    -mm_ksp_monitor
+    -mm_ksp_rtol 1.0e-10
+    -mm_pc_type jacobi
+"""
+
+function linear_swe(parts)
     GridapPETSc.with(args=split(options)) do
         #Parameters
         B = 100 
@@ -65,7 +79,7 @@ function run_linear_SWE(parts)
         add_tag_from_tags!(labels,"top",[3,4,6])
         add_tag_from_tags!(labels,"inside",[9])
         DC = ["left","right"]
-        dir = "output/"
+        dir = "output3/"
         Ω = Triangulation(model)
         dΩ = Measure(Ω,degree)
         dω = Measure(Ω,degree,ReferenceDomain())
@@ -105,16 +119,16 @@ function run_linear_SWE(parts)
         jac_t(t,(u,ζ),(dut,dζt),(w,ϕ)) = ∫(dut⋅w + dζt*ϕ)dΩ
 
         op = TransientFEOperator(res,jac,jac_t,X,Y)
-        nls = PETScNonlinearSolver() 
+        nls = PETScNonlinearSolver()
         Tend = 30
-        ode_solver = ThetaMethod(nls,0.5,0.5)
+        ode_solver = ThetaMethod(nls,1.0,0.5)
         x = solve(ode_solver,op,uζn,0.0,Tend)
 
         if isdir(dir)
-            createpvd(parts,joinpath(dir,"linear_topo")) do pvd
+            createpvd(parts,joinpath(dir,"third_linear_topo")) do pvd
                 for (x,t) in x
                     u,ζ = x
-                    pvd[t] = createvtk(Ω,  "linear_topo$t", cellfields=["u"=>u,"ζ+H "=>ζ+H])
+                    pvd[t] = createvtk(Ω, "third_linear_topo_$t"*".vtu", cellfields=["u"=>u,"ζ+H "=>ζ+H])
                 end
             end
         else
@@ -122,12 +136,12 @@ function run_linear_SWE(parts)
             createpvd(parts,joinpath(dir,"linear_topo")) do pvd
                 for (x,t) in x
                     u,ζ = x
-                    pvd[t] = createvtk(Ω,  "linear_topo$t", cellfields=["u"=>u,"ζ+H "=>ζ+H])
+                    pvd[t] = createvtk(Ω, "third_linear_topo_$t"*".vtu", cellfields=["u"=>u,"ζ+H "=>ζ+H])
                 end
             end
         end
     end
 end
 
-partition = (2,2)
-prun(run_linear_SWE, mpi, partition) # use `sequential` instead of `mpi` for debugging 
+partition = (2, 2)
+prun(linear_swe, mpi, partition) # use `sequential` instead of `mpi` for debugging 
