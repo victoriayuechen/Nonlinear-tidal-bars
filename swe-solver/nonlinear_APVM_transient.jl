@@ -76,7 +76,7 @@ function APVM_run(order,degree,D₀,u₀,topography,forcefunc,dir,periodic::Bool
     T0 = 0.0
     τ = dt*0.5
     
-    DC = ["left","right"]
+    DC = ["shore_top","shore_bot","island","outlet_left"]
 
     #Make triangulations and boundaries
     Ω = Triangulation(model)
@@ -91,16 +91,19 @@ function APVM_run(order,degree,D₀,u₀,topography,forcefunc,dir,periodic::Bool
     dΓ = Measure(Γ,degree)
 
     udc(x,t::Real) = VectorValue(0.0,0.0)
+    uda(x,t::Real) = VectorValue(1*sin(π*(1/3600)*t),0.0)
     udc(t::Real) = x -> udc(x,t)
+    uda(t::Real) = x -> uda(x,t)
+
     #Make FE spaces
     if periodic
         reffe_rt = ReferenceFE(raviart_thomas,Float64,order)#
         V = TestFESpace(model,reffe_rt;conformity=:HDiv,dirichlet_tags=DC)#
-        U = TransientTrialFESpace(V,[udc,udc])
+        U = TransientTrialFESpace(V,[udc,udc,udc,uda])
     else
         reffe_rt = ReferenceFE(raviart_thomas,Float64,order)
         V = TestFESpace(model,reffe_rt;conformity=:HDiv,dirichlet_tags=DC)#
-        U = TransientTrialFESpace(V,[udc,udc])
+        U = TransientTrialFESpace(V,[udc,udc,udc,uda])
     end
 
     reffe_lgn = ReferenceFE(lagrangian,Float64,order)
@@ -155,7 +158,7 @@ function APVM_run(order,degree,D₀,u₀,topography,forcefunc,dir,periodic::Bool
 
     #Define operators and solvers
     op = TransientFEOperator(res,jac,jac_t,X,Y)
-    nls = LUSolver()#NLSolver(show_trace=true,linesearch=BackTracking())
+    nls = NLSolver(show_trace=true,method =:newton,linesearch=BackTracking())
     ode_solver = ThetaMethod(nls,dt,0.5)
     x = solve(ode_solver,op,uDn,T0,Tend)
 
@@ -186,7 +189,7 @@ end
 
 #Variable functions to be used to setup model, used for local tests
 function D₀((x,y))
-    Dout = -topography((x,y)) +  0.5 + 0.05*exp(-0.01*(x-50)^2 -0.01*(y-25)^2)
+    Dout = -topography((x,y)) +  0.5 + 0.0*exp(-0.01*(x-50)^2 -0.01*(y-25)^2)
     Dout
 end
 
@@ -206,7 +209,7 @@ function forcfunc((x,y),t)
 end
 
 outputdir = "output_swe"
-dir = "NL_SWE_APVM_test"
+dir = "schelde_test"
 if !isdir(outputdir)
     mkdir(outputdir)
 end
@@ -215,7 +218,7 @@ if !isdir(joinpath(outputdir,dir))
     mkdir(joinpath(outputdir,dir))
 end
 
-model = GmshDiscreteModel("swe-solver/meshes/100x100periodic.msh")
+model = GmshDiscreteModel("swe-solver/meshes/schelde_mesh.msh")
 
 #=
 Input:
@@ -231,4 +234,4 @@ Periodic    = if true periodic in y-dir
 Tend        = Total runtime
 dt          = Time setup
 =#
-APVM_run(1,4,D₀,u₀,topography,forcfunc,joinpath(outputdir,dir),true,100.0,1.0,model)
+APVM_run(1,4,D₀,u₀,topography,forcfunc,joinpath(outputdir,dir),true,60*60*6,120,model)
