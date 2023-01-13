@@ -7,15 +7,22 @@ using Parameters
     H::Float64 = 3.0
 
     ##''''''''''''''Grid''''''''''''''##
-    x_points = 20
-    y_points = 100
-    order = 1
-    degree = 3
+    x_points::Int = 20
+    y_points::Int = 100
+    order::Int = 1
+    degree::Int = 3
+
+    ##''''''''''''''Initial_solutions''''''''''''''##
+    u_x::Float64 = 0.0
+    u_y::Float64 = 0.0
+    ζₙ::Float64 = 0.0
 
     ##''''''''''''''Timestepping''''''''''''''##
-    dt::Real = 5
+    dt1::Real = 5
+    dt2::Real = 10
     Tstart::Real = 0.0
-    Tend::Real = 44700
+    Tend1::Real = 44700
+    Tend2::Real = 10.0
     theta::Float64= 0.5
     T_save::Real = 50
 
@@ -31,6 +38,9 @@ using Parameters
     ##''''''''''''''Stabilization Parameters''''''''''''''##
     α::Float64 = 1e-6                                #Based on ν
     ν::Float64 = 1e-6                                #From Anna Louka
+
+    ##''''''''''''''Saving directory''''''''''''''##
+    dir = "./test"
 end
 
 

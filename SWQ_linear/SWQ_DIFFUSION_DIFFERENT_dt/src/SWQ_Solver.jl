@@ -35,9 +35,10 @@ function solver(Initial_conditions, Y, X, dt, Tstart, Tend, dΩ, dΓ, show_resul
     jac_t(t,(u,ζ),(dut,dζt),(w,ϕ)) = ∫(dut⋅w + dζt*ϕ)dΩ
 
     ##''''''''''''''Solver with ThetaMethod''''''''''''''##
+    @unpack theta = Param
     op = TransientFEOperator(res,jac,jac_t,X,Y)
     nls = NLSolver(show_trace=show_result,method= :newton,linesearch=BackTracking())
-    ode_solver = ThetaMethod(nls,dt,0.5)
+    ode_solver = ThetaMethod(nls,dt,theta)
     x = solve(ode_solver,op,Initial_conditions,Tstart,Tend)
     return x
 end
