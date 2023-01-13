@@ -211,7 +211,7 @@ end
 
 B = 100
 L = 100
-partition = (50,50)
+partition = (100,100)
 domain = (0,B,0,L)
 model = CartesianDiscreteModel(domain,partition;isperiodic=(false,true)) 
 labels = get_face_labeling(model)
@@ -221,7 +221,7 @@ add_tag_from_tags!(labels,"right",[8])
 add_tag_from_tags!(labels,"top",[3,4,6])
 add_tag_from_tags!(labels,"inside",[9])
 DC = ["left","right"]
-Tend = 50
+Tend = 30
 dt = 0.5
 #=
 Input:

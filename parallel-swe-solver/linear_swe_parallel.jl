@@ -105,7 +105,7 @@ function run_linear_SWE(parts)
         jac_t(t,(u,ζ),(dut,dζt),(w,ϕ)) = ∫(dut⋅w + dζt*ϕ)dΩ
 
         op = TransientFEOperator(res,jac,jac_t,X,Y)
-        nls = PETScNonlinearSolver() 
+        nls = LUSolver() 
         Tend = 30
         ode_solver = ThetaMethod(nls,0.5,0.5)
         x = solve(ode_solver,op,uζn,0.0,Tend)
