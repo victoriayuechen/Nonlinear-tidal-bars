@@ -1,8 +1,11 @@
 using Gridap
+using Parameters
+includet("SWQ_Parameters.jl")
 
 
-function Make_model(B,L,x_points,y_points,order,degree)
+function Make_model(Param::Parameter)
     #''''''''''''''Make model''''''''''''''##
+    @unpack B, L, x_points, y_points, order, degree = Param
     domain = (0,B,0,L)                      #Original x and y flipped
     partition = (x_points,y_points)         #Partition
 

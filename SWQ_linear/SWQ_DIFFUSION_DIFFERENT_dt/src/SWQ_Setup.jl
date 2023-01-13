@@ -1,17 +1,14 @@
+using Parameters
 includet("SWQ_Make_Model.jl")
 includet("SWQ_Initial_Solution.jl")
+includet("SWQ_Parameters.jl")
 
 
 ##"""""""""""""""Setup function""""""""""""""##
-function setup()
-    B = 1000
-    L = 10000
-    x_points = 20
-    y_points = 100
-    order = 1
-    degree = 3
+function setup(Param)
     
-    @time Ω, dΩ, dΓ, Y, X, P = Make_model(B,L,x_points,y_points,order,degree)
+    
+    @time Ω, dΩ, dΓ, Y, X, P = Make_model(Param)
 
     function u₀(t) 
         u = VectorValue(0.0,0.0)
@@ -22,7 +19,7 @@ function setup()
         ζ = 0.0
         return ζ
     end
-
+    @unpack B, L = Param
     h₀(x,t) = 0.1 * cos(π/B * x[1]) * cos(2π/L * x[2])      #Hepkema original function for h
     h₀(t::Real) = x->h₀(x,t)
     global h = find_h(h₀,P)
