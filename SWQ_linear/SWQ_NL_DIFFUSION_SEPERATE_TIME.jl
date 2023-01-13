@@ -174,7 +174,7 @@ end
 
 
 ##''''''''''''''''Define solver''''''''''''''''##
-function solver(Initial_conditions, latitude, Y, X, dt, Tstart, Tend, dΩ, dΓ, h, show_result)
+function solver(Initial_conditions, Y, X, dt, Tstart, Tend, dΩ, dΓ, show_result)
     res(t,(u,ζ),(w,ϕ)) = ∫(func_ut(t,(u,ζ),(w,ϕ)) +                     #Velocity change
         func_con(t,(u,ζ),(w,ϕ)) +                                       #Convection
         func_cor(t,(u,ζ),(w,ϕ)) +                                       #Coriolis
@@ -214,12 +214,16 @@ function writing_output(dir, x, Ω, Tend)
     if isdir(dir)
         output_file = paraview_collection(joinpath(dir,"1d-topo-output"))do pvd
             for (x,t) in x
+                if t==Tend
+                    global xn = x
+                end
                 if t%(500) ==0
                     u,ζ = x
                     pvd[t] = createvtk(Ω,joinpath(dir,"1d-topo$t.vtu"),cellfields=["u"=>u,"ζ"=>ζ,"h"=>h])
                     println("Saved")
                 end
                 println("done $t/$Tend")
+               
             end
         end
     else
@@ -232,6 +236,10 @@ function writing_output(dir, x, Ω, Tend)
                     println("Saved")
                 end
                 println("done $t/$Tend")
+                if t==Tend
+                    global xn = x
+                end
+
             end
         end
     end
@@ -243,7 +251,8 @@ end
 
 global ν = 1e-6                                #From Anna Louka
 global η = 7.29e-5                             #angular speed of Earth rotation        (s^(-1))
-global f = 2*η*sin(52*(π/180))           #coriolis parameter                     (s^(-1))
+latitude = 52
+global f = 2*η*sin(latitude*(π/180))           #coriolis parameter                     (s^(-1))
 global g = 9.81                                #Gravitational constant                 (ms^(-2))
 global H = 3                                   #Constant layer depth at rest           (m)
 global U_start = 0.5                           #Background current amplitude           (ms^(-1))
@@ -252,6 +261,37 @@ global cD = 0.0025                             #Drag coefficient                
 
 ##''''''''''''''Stabilization Parameters''''''''''''''##
 global α = 1e-6                                #Based on ν
+##"""""""""""""""Setup function""""""""""""""##
+function setup()
+    B = 1000
+    L = 10000
+    x_points = 20
+    y_points = 100
+    order = 1
+    degree = 3
+    
+    @time Ω, dΩ, dΓ, Y, X, P = Make_model(B,L,x_points,y_points,order,degree)
+
+    function u₀(t) 
+        u = VectorValue(0.0,0.0)
+        return u
+    end
+
+    function ζ₀(t)
+        ζ = 0.0
+        return ζ
+    end
+
+    h₀(x,t) = 0.1 * cos(π/B * x[1]) * cos(2π/L * x[2])      #Hepkema original function for h
+    h₀(t::Real) = x->h₀(x,t)
+    global h = find_h(h₀,P)
+    # u₀(t) = VectorValue(0.0,0.0) evenly fast
+    # ζ₀(t) = 0.0
+
+    @time Initial_solutions = init_sol(u₀,ζ₀,X)
+
+    return Initial_solutions, Ω, Y, X, dΩ, dΓ
+end
 
 function SWES()
     B = 1000
@@ -281,13 +321,22 @@ function SWES()
 
     @time Initial_solutions = init_sol(u₀,ζ₀,X)
 
-    latitude = 52
     dt = 5
     Tstart = 0
     Tend = 50
-    @time x = solver(Initial_solutions, latitude, Y, X, dt, Tstart, Tend, dΩ, dΓ, h, false)
+    @time x = solver(Initial_solutions, Y, X, dt, Tstart, Tend, dΩ, dΓ, false)
     dir = "./test"
     @time writing_output(dir, x, Ω, Tend)
 end
 
-SWES()
+function SWES_Diff_dt(Initial_solutions, Ω, Y, X, dΩ, dΓ, dt1, dt2, Tend1, Tend2, dir)
+    x1 = solver(Initial_solutions, Y, X, dt1, 0.0, Tend1, dΩ, dΓ, false)
+    writing_output(dir, x1, Ω, Tend1)
+    # Initial_solutions = init_sol(uₙ,ζₙ,X)
+    x2 = solver(xn,Y,X,dt2,Tend1,Tend2,dΩ,dΓ, true)
+    writing_output(dir, x2, Ω, Tend2)
+end
+
+Initial_solutions, Ω, Y, X, dΩ, dΓ = setup()
+
+SWES_Diff_dt(Initial_solutions, Ω, Y, X, dΩ, dΓ, 5, 10, 10, 60, "./test")
