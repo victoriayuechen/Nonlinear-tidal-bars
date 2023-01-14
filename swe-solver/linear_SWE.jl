@@ -64,11 +64,14 @@ function run_linear_SWE(order,degree,ζ₀,u₀,forcefunc,Tend,dt,model,H,DC,dir
     ode_solver = ThetaMethod(nls,dt,0.5)#RungeKutta(nls,dt,Symbol("BE_1_0_1"))
     x = solve(ode_solver,op,x0,0.0,Tend)
 
+    epsilon = 1e-3
+
     if isdir(dir) 
         output_file = paraview_collection(joinpath(dir,"linear_SWE_$(filename)"))do pvd
             #pvd[0.0] = createvtk(Ω,joinpath(dir,"linear_SWE_$(filename)_0.0.vtu"),cellfields=["u"=>un,"ζ"=>(ζn)])
             for (x,t) in x
-                if (round(t % tcapture,digits=1) == 0.0 || round(t % tcapture,digits=1) == 1.0)
+                # println(t)
+                if (abs(round(t/tcapture)*tcapture - t) < epsilon) # || round(t % tcapture,digits=4) == 1.0
                     u,ζ = x
                     pvd[t] = createvtk(Ω,joinpath(dir,"linear_SWE_$(filename)_$t.vtu"),cellfields=["u"=>u,"ζ"=>(ζ)])
                     println("done $t/$Tend")
@@ -80,7 +83,8 @@ function run_linear_SWE(order,degree,ζ₀,u₀,forcefunc,Tend,dt,model,H,DC,dir
         output_file = paraview_collection(joinpath(dir,"linear_SWE_$(filename)")) do pvd
             #pvd[0.0] = createvtk(Ω,joinpath(dir,"linear_SWE_$(filename)_0.0.vtu"),cellfields=["u"=>un,"ζ"=>(ζn)])
             for (x,t) in x
-                if (round(t % tcapture,digits=1) == 0.0 || round(t % tcapture,digits=1) == 1.0)
+                # println(t)
+                if (abs(round(t/tcapture)*tcapture - t) < epsilon) # || round(t % tcapture,digits=4) == 1.0
                     u,ζ = x
                     pvd[t] = createvtk(Ω,joinpath(dir,"linear_SWE_$(filename)_$t.vtu"),cellfields=["u"=>u,"ζ"=>(ζ)])
                     println("done $t/$Tend")

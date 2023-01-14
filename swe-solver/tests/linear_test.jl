@@ -1,6 +1,7 @@
 
 using Gridap
 using GridapGmsh
+using Revise
 
 includet("../linear_SWE.jl")
 using .MyLinearSWE
@@ -22,15 +23,15 @@ end
 
 order = 1
 degree = 4
-model = GmshDiscreteModel("swe-solver/meshes/100x100periodic.msh")
+model = GmshDiscreteModel("swe-solver/meshes/100x100periodic_testing.msh")
 DC = ["right","left"]
-filename = "test1"
+filename = "test_01"
 dir = joinpath("output_swe/linear_SWE",filename)
 H = 0.5
 latitude = 52
-Tend = 50
-dt = 1.0
-tcapture = 1.0
+Tend = 100
+dt = 0.1
+tcapture = 2.0
 
 time_1 = time()
 run_linear_SWE(order,degree,ζ₀,u₀,forcefunc,Tend,dt,model,H,DC,dir,latitude,filename,tcapture::Float64)
