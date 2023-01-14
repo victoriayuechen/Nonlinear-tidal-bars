@@ -1,3 +1,4 @@
+module MyLinearSWE
 using Gridap
 using WriteVTK
 using LineSearches: BackTracking
@@ -5,8 +6,7 @@ using GridapGmsh
 # include("mesh_generator.jl")
 # using .MyMeshGenerator
 
-export run_linear_SWE
-export run_linear_SWE
+export run_linear_SWE 
 
 function perp(u)
     p = VectorValue(-u[2],u[1])
@@ -20,7 +20,7 @@ function uζ(u₀,ζ₀,X,Y,dΩ)
 end
 
 
-function run_linear_SWE(order,degree,ζ₀,u₀,forcefunc,Tend,dt,model,H,DC,dir,latitude)
+function run_linear_SWE(order,degree,ζ₀,u₀,forcefunc,Tend,dt,model,H,DC,dir,latitude,filename,tcapture)
 
     #Parameters 
     η = 7.29e-5
@@ -36,10 +36,8 @@ function run_linear_SWE(order,degree,ζ₀,u₀,forcefunc,Tend,dt,model,H,DC,dir
     reffe_rt = ReferenceFE(raviart_thomas,Float64,order)#
     V = TestFESpace(model,reffe_rt,dirichlet_tags=DC,conformity=:HDiv)#
     udc(x,t::Real) = VectorValue(0.0,0.0)
-    uda(x,t::Real) = VectorValue(1*sin(π*(1/3600)*t),0.0)
     udc(t::Real) = x -> udc(x,t)
-    uda(t::Real) = x -> uda(x,t)
-    U = TransientTrialFESpace(V,[udc,udc,udc,uda])
+    U = TransientTrialFESpace(V,[udc,udc])
 
     reffe_lg = ReferenceFE(lagrangian,Float64,order)
     Q = TestFESpace(model,reffe_lg,conformity=:L2)
@@ -63,56 +61,33 @@ function run_linear_SWE(order,degree,ζ₀,u₀,forcefunc,Tend,dt,model,H,DC,dir
 
     op = TransientFEOperator(res,jac,jac_t,X,Y)
     nls = LUSolver()
-    ode_solver = ThetaMethod(nls,dt,0.5)
+    ode_solver = ThetaMethod(nls,dt,0.5)#RungeKutta(nls,dt,Symbol("BE_1_0_1"))
     x = solve(ode_solver,op,x0,0.0,Tend)
 
-    if isdir(dir)
-        output_file = paraview_collection(joinpath(dir,"linear_SWE"))do pvd
-            pvd[0.0] = createvtk(Ω,joinpath(dir,"linear_SWE0.0.vtu"),cellfields=["u"=>un,"ζ"=>(ζn)])
+    if isdir(dir) 
+        output_file = paraview_collection(joinpath(dir,"linear_SWE_$(filename)"))do pvd
+            #pvd[0.0] = createvtk(Ω,joinpath(dir,"linear_SWE_$(filename)_0.0.vtu"),cellfields=["u"=>un,"ζ"=>(ζn)])
             for (x,t) in x
-                u,ζ = x
-                pvd[t] = createvtk(Ω,joinpath(dir,"linear_SWE$t.vtu"),cellfields=["u"=>u,"ζ"=>(ζ)])
-                println("done $t/$Tend")
+                if (round(t % tcapture,digits=1) == 0.0 || round(t % tcapture,digits=1) == 1.0)
+                    u,ζ = x
+                    pvd[t] = createvtk(Ω,joinpath(dir,"linear_SWE_$(filename)_$t.vtu"),cellfields=["u"=>u,"ζ"=>(ζ)])
+                    println("done $t/$Tend")
+                end
             end
         end
     else
         mkdir(dir)
-        output_file = paraview_collection(joinpath(dir,"linear_SWE")) do pvd
-            pvd[0.0] = createvtk(Ω,joinpath(dir,"linear_SWE0.0.vtu"),cellfields=["u"=>un,"ζ"=>(ζn)])
+        output_file = paraview_collection(joinpath(dir,"linear_SWE_$(filename)")) do pvd
+            #pvd[0.0] = createvtk(Ω,joinpath(dir,"linear_SWE_$(filename)_0.0.vtu"),cellfields=["u"=>un,"ζ"=>(ζn)])
             for (x,t) in x
-                u,ζ = x
-                pvd[t] = createvtk(Ω,joinpath(dir,"linear_SWE$t.vtu"),cellfields=["u"=>u,"ζ"=>(ζ)])
-                println("done $t/$Tend")
+                if (round(t % tcapture,digits=1) == 0.0 || round(t % tcapture,digits=1) == 1.0)
+                    u,ζ = x
+                    pvd[t] = createvtk(Ω,joinpath(dir,"linear_SWE_$(filename)_$t.vtu"),cellfields=["u"=>u,"ζ"=>(ζ)])
+                    println("done $t/$Tend")
+                end
             end
         end
     end
 end
-
-function ζ₀((x,y))
-    h =0.0*exp(-0.1*(x-50)^2 -0.1*(y-30)^2)
-    h
 end
 
-
-function u₀((x,y))
-    u = VectorValue(0.0,0.0)
-    u
-end
-
-function forcefunc((x,y),t)
-    f = VectorValue(0.0,0.0*cos(π*(1/5)*t))
-    f
-end
-
-order = 1
-degree = 4
-model = GmshDiscreteModel("swe-solver/meshes/schelde_mesh.msh")
-DC = ["shore_top","shore_bot","island","outlet_left"]
-dir = "swe-solver/output_linear_swe"
-H = 0.5
-latitude = 52
-Tend = 60*60*6
-dt = 120
-
-
-run_linear_SWE(order,degree,ζ₀,u₀,forcefunc,Tend,dt,model,H,DC,dir,latitude)
