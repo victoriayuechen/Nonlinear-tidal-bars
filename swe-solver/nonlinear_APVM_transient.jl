@@ -1,4 +1,4 @@
-
+module MyNonlinearAPVM
 using Pkg
 Pkg.activate(".")
 
@@ -14,7 +14,7 @@ using Gridap.TensorValues: meas
 #Makes use of the Anticipated Potential Vorticity Method (APVM) produced by McRae and Cotter: https://doi.org/10.1002/qj.2291 
 #Implementation in Gridap for this 2D domain also uses similar code produced by the Gridap GeoSciences github: https://github.com/gridapapps/GridapGeosciences.jl
 
-
+export APVM_run
 
 function uD(u₀,D₀,F₀,q₀,X,Y,dΩ)
     a((u,D,r,u2),(w,ϕ,ϕ2,w2)) = ∫(w⋅u + ϕ*D + w2⋅u2 + ϕ2*r)dΩ
@@ -55,7 +55,7 @@ end
 
 function APVM_run(order,degree,D₀,u₀,topography,forcefunc,dir,periodic::Bool,Tend,dt,model,DC)
     #Parameters
-    latitude = 52 #Latitude of the model being analysed
+    latitude = 50 #Latitude of the model being analysed
     η = 7.29e-5
     f = 2*η*sin(latitude*(π/180))
     cd = 0.0025
@@ -78,9 +78,8 @@ function APVM_run(order,degree,D₀,u₀,topography,forcefunc,dir,periodic::Bool
     dΓ = Measure(Γ,degree)
 
     udc(x,t::Real) = VectorValue(0.0,0.0)
-    uda(x,t::Real) = VectorValue(1*sin(π*(1/3600)*t),0.0)
     udc(t::Real) = x -> udc(x,t)
-    uda(t::Real) = x -> uda(x,t)
+
 
     #Make FE spaces
     if periodic
@@ -143,7 +142,7 @@ function APVM_run(order,degree,D₀,u₀,topography,forcefunc,dir,periodic::Bool
 
     #Define operators and solvers
     op = TransientFEOperator(res,jac,jac_t,X,Y)
-    nls =NLSolver(show_trace=true,method =:newton,linesearch=BackTracking())
+    nls = NLSolver(show_trace=true,method =:trust_region)
     ode_solver = ThetaMethod(nls,dt,0.5)
     x = solve(ode_solver,op,uDn,T0,Tend)
 
@@ -169,73 +168,7 @@ function APVM_run(order,degree,D₀,u₀,topography,forcefunc,dir,periodic::Bool
         end
     end
 end
-
-
-
-#Variable functions to be used to setup model, used for local tests
-function D₀((x,y))
-    Dout = -topography((x,y)) +  0.5
-    Dout
 end
 
-function topography((x,y))
-    p =  0.1 * cos(π/B * x) * cos(2π/L * y)
-    p
-end
 
-function u₀((x,y))
-    u = VectorValue(0.0,0.0)
-    u
-end
 
-function forcfunc((x,y),t)
-    U_start =  0.5 
-    η = 7.29e-5
-    latitude = 52
-    cD = 0.0025
-    f = 2*η*sin(latitude*(π/180))
-    σ = 2*pi/44700
-    f = VectorValue(-f*U_start*cos(σ*t),-σ*U_start*sin(σ*t)+cD*abs(U_start*cos(σ*t))*U_start*cos(σ*t)) 
-    f
-end
-
-outputdir = "output_swe"
-dir = "NL_SWE_APVM_test"
-if !isdir(outputdir)
-    mkdir(outputdir)
-end
-
-if !isdir(joinpath(outputdir,dir))
-    mkdir(joinpath(outputdir,dir))
-end
-
-B = 1000
-L = 10000
-partition = (50,50)
-domain = (0,B,0,L)
-model = GmshDiscreteModel("swe-solver/meshes/1000x10000periodic.msh")
-# model = CartesianDiscreteModel(domain,partition;isperiodic=(false,true)) 
-# labels = get_face_labeling(model)
-# add_tag_from_tags!(labels,"bottom",[1,2,5])
-# add_tag_from_tags!(labels,"left",[7])
-# add_tag_from_tags!(labels,"right",[8])
-# add_tag_from_tags!(labels,"top",[3,4,6])
-# add_tag_from_tags!(labels,"inside",[9])
-DC = ["left","right"]
-Tend = 44700
-dt = 480
-#=
-Input:
-order       = order of FE polynomials
-degree      = lebesgue measure with quadruture rule of degree
-D_0         = initial fluid depth h
-u_0         = initial velocity vector field
-topography  = bottom topography, passed as a function of x and Y
-forcfunc    = The forcing function, passed as a function in x,y
-outputdir   = the output directory of all output folders
-dir         = the actual output folder NL_SWE_APVM_test
-Periodic    = if true periodic in y-dir
-Tend        = Total runtime
-dt          = Time setup
-=#
-APVM_run(1,4,D₀,u₀,topography,forcfunc,joinpath(outputdir,dir),true,Tend,dt,model,DC)
