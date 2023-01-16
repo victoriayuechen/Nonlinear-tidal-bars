@@ -123,13 +123,14 @@ end
 
 #Coriolis
 function coriolis(u) 
-    corio = VectorValue(u[2],-u[1]) 
+    corio = VectorValue(-u[2],u[1]) 
     return corio                                                                            
 end
 
 #forcfunc
 function forcfunc(t,Param) 
-    @unpack f, U_start, σ, cD = Param
-    forc = VectorValue(-f*U_start*cos(σ*t),-σ*U_start*sin(σ*t)+cD*abs(U_start*cos(σ*t))*U_start*cos(σ*t))      #Fₚ from Hepkema
+    @unpack f, U_start, σ, cD, H = Param
+    # forc = VectorValue(-f*U_start*cos(σ*t),-σ*U_start*sin(σ*t)+cD/H*abs(U_start*cos(σ*t))*U_start*cos(σ*t))      #Fₚ from Hepkema
+    forc = VectorValue(σ*U_start*cos(σ*t)+cD/H*abs(U_start*sin(σ*t))*U_start*sin(σ*t),f*U_start*sin(σ*t))
     return forc
 end

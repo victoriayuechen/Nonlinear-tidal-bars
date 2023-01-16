@@ -7,10 +7,10 @@ using Parameters
     H::Float64 = 3.0
 
     ##''''''''''''''Grid''''''''''''''##
-    x_points::Int = 20
-    y_points::Int = 100
+    x_points::Int = 100
+    y_points::Int = 20
     order::Int = 1
-    degree::Int = 3
+    degree::Int = 4
 
     ##''''''''''''''Initial_solutions''''''''''''''##
     u_x::Float64 = 0.0
@@ -18,17 +18,21 @@ using Parameters
     ζₙ::Float64 = 0.0
 
     ##''''''''''''''Timestepping''''''''''''''##
-    dt1::Real = 5
+    dt1::Real = 5 #10
     dt2::Real = 10
+    dt3::Real = 10
     Tstart::Real = 0.0
     Tend1::Real = 44700
-    Tend2::Real = 10.0
-    theta::Float64= 0.5
+    Tend2::Real = 30000
+    Tend3::Real = 40000
+    theta1::Float64 = 0.5
+    theta2::Float64 = 0.5
+    theta3::Float64 = 0.5
     T_save::Real = 50
 
     ##''''''''''''''Physical parameter''''''''''''''##
     η::Float64 = 7.29e-5                             #angular speed of Earth rotation        (s^(-1))
-    latitude::Float64 = 52.0
+    latitude::Float64 = 50.0
     f::Float64 = 2*η*sin(latitude*(π/180))           #coriolis parameter                     (s^(-1))
     g::Float64 = 9.81                                #Gravitational constant                 (ms^(-2))
     U_start::Float64 = 0.5                           #Background current amplitude           (ms^(-1))
