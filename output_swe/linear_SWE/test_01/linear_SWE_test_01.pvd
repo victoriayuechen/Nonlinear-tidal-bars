@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<VTKFile type="Collection" version="1.0" byte_order="LittleEndian" compressor="vtkZLibDataCompressor">
+  <Collection>
+    <DataSet timestep="2.0000000000000004" part="0" file="linear_SWE_test_01_2.0000000000000004.vtu"/>
+    <DataSet timestep="4.000000000000002" part="0" file="linear_SWE_test_01_4.000000000000002.vtu"/>
+    <DataSet timestep="5.999999999999995" part="0" file="linear_SWE_test_01_5.999999999999995.vtu"/>
+    <DataSet timestep="7.999999999999988" part="0" file="linear_SWE_test_01_7.999999999999988.vtu"/>
+    <DataSet timestep="9.99999999999998" part="0" file="linear_SWE_test_01_9.99999999999998.vtu"/>
+    <DataSet timestep="11.999999999999973" part="0" file="linear_SWE_test_01_11.999999999999973.vtu"/>
+    <DataSet timestep="13.999999999999966" part="0" file="linear_SWE_test_01_13.999999999999966.vtu"/>
+    <DataSet timestep="15.99999999999996" part="0" file="linear_SWE_test_01_15.99999999999996.vtu"/>
+    <DataSet timestep="17.999999999999986" part="0" file="linear_SWE_test_01_17.999999999999986.vtu"/>
+    <DataSet timestep="20.000000000000014" part="0" file="linear_SWE_test_01_20.000000000000014.vtu"/>
+    <DataSet timestep="22.000000000000043" part="0" file="linear_SWE_test_01_22.000000000000043.vtu"/>
+    <DataSet timestep="24.00000000000007" part="0" file="linear_SWE_test_01_24.00000000000007.vtu"/>
+    <DataSet timestep="26.0000000000001" part="0" file="linear_SWE_test_01_26.0000000000001.vtu"/>
+    <DataSet timestep="28.000000000000128" part="0" file="linear_SWE_test_01_28.000000000000128.vtu"/>
+    <DataSet timestep="30.000000000000156" part="0" file="linear_SWE_test_01_30.000000000000156.vtu"/>
+    <DataSet timestep="32.000000000000185" part="0" file="linear_SWE_test_01_32.000000000000185.vtu"/>
+    <DataSet timestep="34.00000000000021" part="0" file="linear_SWE_test_01_34.00000000000021.vtu"/>
+    <DataSet timestep="36.00000000000024" part="0" file="linear_SWE_test_01_36.00000000000024.vtu"/>
+    <DataSet timestep="38.00000000000027" part="0" file="linear_SWE_test_01_38.00000000000027.vtu"/>
+    <DataSet timestep="40.0000000000003" part="0" file="linear_SWE_test_01_40.0000000000003.vtu"/>
+    <DataSet timestep="42.00000000000033" part="0" file="linear_SWE_test_01_42.00000000000033.vtu"/>
+    <DataSet timestep="44.000000000000355" part="0" file="linear_SWE_test_01_44.000000000000355.vtu"/>
+    <DataSet timestep="46.000000000000384" part="0" file="linear_SWE_test_01_46.000000000000384.vtu"/>
+    <DataSet timestep="48.00000000000041" part="0" file="linear_SWE_test_01_48.00000000000041.vtu"/>
+    <DataSet timestep="50.00000000000044" part="0" file="linear_SWE_test_01_50.00000000000044.vtu"/>
+    <DataSet timestep="52.00000000000047" part="0" file="linear_SWE_test_01_52.00000000000047.vtu"/>
+    <DataSet timestep="54.0000000000005" part="0" file="linear_SWE_test_01_54.0000000000005.vtu"/>
+    <DataSet timestep="56.000000000000526" part="0" file="linear_SWE_test_01_56.000000000000526.vtu"/>
+    <DataSet timestep="58.000000000000554" part="0" file="linear_SWE_test_01_58.000000000000554.vtu"/>
+    <DataSet timestep="60.00000000000058" part="0" file="linear_SWE_test_01_60.00000000000058.vtu"/>
+    <DataSet timestep="62.00000000000061" part="0" file="linear_SWE_test_01_62.00000000000061.vtu"/>
+    <DataSet timestep="64.00000000000064" part="0" file="linear_SWE_test_01_64.00000000000064.vtu"/>
+    <DataSet timestep="66.00000000000053" part="0" file="linear_SWE_test_01_66.00000000000053.vtu"/>
+    <DataSet timestep="68.00000000000041" part="0" file="linear_SWE_test_01_68.00000000000041.vtu"/>
+    <DataSet timestep="70.0000000000003" part="0" file="linear_SWE_test_01_70.0000000000003.vtu"/>
+    <DataSet timestep="72.00000000000018" part="0" file="linear_SWE_test_01_72.00000000000018.vtu"/>
+    <DataSet timestep="74.00000000000007" part="0" file="linear_SWE_test_01_74.00000000000007.vtu"/>
+    <DataSet timestep="75.99999999999996" part="0" file="linear_SWE_test_01_75.99999999999996.vtu"/>
+    <DataSet timestep="77.99999999999984" part="0" file="linear_SWE_test_01_77.99999999999984.vtu"/>
+    <DataSet timestep="79.99999999999973" part="0" file="linear_SWE_test_01_79.99999999999973.vtu"/>
+    <DataSet timestep="81.99999999999962" part="0" file="linear_SWE_test_01_81.99999999999962.vtu"/>
+    <DataSet timestep="83.9999999999995" part="0" file="linear_SWE_test_01_83.9999999999995.vtu"/>
+    <DataSet timestep="85.99999999999939" part="0" file="linear_SWE_test_01_85.99999999999939.vtu"/>
+    <DataSet timestep="87.99999999999928" part="0" file="linear_SWE_test_01_87.99999999999928.vtu"/>
+    <DataSet timestep="89.99999999999916" part="0" file="linear_SWE_test_01_89.99999999999916.vtu"/>
+    <DataSet timestep="91.99999999999905" part="0" file="linear_SWE_test_01_91.99999999999905.vtu"/>
+    <DataSet timestep="93.99999999999893" part="0" file="linear_SWE_test_01_93.99999999999893.vtu"/>
+    <DataSet timestep="95.99999999999882" part="0" file="linear_SWE_test_01_95.99999999999882.vtu"/>
+    <DataSet timestep="97.9999999999987" part="0" file="linear_SWE_test_01_97.9999999999987.vtu"/>
+    <DataSet timestep="99.9999999999986" part="0" file="linear_SWE_test_01_99.9999999999986.vtu"/>
+  </Collection>
+</VTKFile>
