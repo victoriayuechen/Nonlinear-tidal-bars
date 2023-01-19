@@ -1,6 +1,6 @@
 
 using Pkg
-Pkg.activate(".")
+# Pkg.activate(".")
 
 using Gridap
 using SparseMatricesCSR
@@ -10,6 +10,9 @@ using LinearAlgebra
 using LineSearches: BackTracking
 using GridapGmsh
 using Gridap.TensorValues: meas
+using CSV, Tables
+using DataFrames
+using DelimitedFiles
 #Solves nonlinear shallow water equations on a 2d plane
 #Makes use of the Anticipated Potential Vorticity Method (APVM) produced by McRae and Cotter: https://doi.org/10.1002/qj.2291 
 #Implementation in Gridap for this 2D domain also uses similar code produced by the Gridap GeoSciences github: https://github.com/gridapapps/GridapGeosciences.jl
@@ -147,6 +150,27 @@ function APVM_run(order,degree,D₀,u₀,topography,forcefunc,dir,periodic::Bool
     ode_solver = ThetaMethod(nls,dt,0.5)
     x = solve(ode_solver,op,uDn,T0,Tend)
 
+    x_hep = []
+    y_hep = []
+    i_grid = 0
+    j_grid = 0
+    while i_grid <= 2
+        append!(x_hep, i_grid)
+        i_grid += 1
+    end
+    while j_grid <= 2
+        append!(y_hep, j_grid)
+        j_grid += 1
+    end
+    probe = [Point(i, j) for i in x_hep, j in y_hep]
+    
+    # probe = [Point(0, 0), Point(1000, 10000)]
+    lDa = zeros(Float64, 1, length(probe))
+    prbDa = DataFrame(lDa, :auto)
+    # println(probe)
+    # CSV.write("Test_grid.csv",  Tables.table(probe), writeheader=false)
+    
+
     #Output results
     if isdir(dir)
         output_file = paraview_collection(joinpath(dir,"nonlinear_topo"))do pvd
@@ -155,7 +179,13 @@ function APVM_run(order,degree,D₀,u₀,topography,forcefunc,dir,periodic::Bool
                 u,D,F = x
                 pvd[t] = createvtk(Ω,joinpath(dir,"nonlinear_topo$t.vtu"),cellfields=["u"=>u,"D"=>(D+h),"h"=>h])
                 println("done $t/$Tend")
+                # CSV.write("zeta_grid$t/$.csv",  Tables.table(D(probe)), writeheader=false)
+                Di = interpolate_everywhere(D, P(0.0))
+                push!(prbDa, Di.(probe)) 
             end
+            println(prbDa)
+            prbDa = Matrix(prbDa)
+            writedlm("da_k_randPh.csv", prbDa, ',')
         end
     else
         mkdir(dir)
@@ -165,7 +195,13 @@ function APVM_run(order,degree,D₀,u₀,topography,forcefunc,dir,periodic::Bool
                 u,D,F = x
                 pvd[t] = createvtk(Ω,joinpath(dir,"nonlinear_topo$t.vtu"),cellfields=["u"=>u,"D"=>(D+h),"h"=>h])
                 println("done $t/$Tend")
+                # CSV.write("zeta_grid$t/$.csv",  Tables.table(D(probe)), writeheader=false)
+                Di = interpolate_everywhere(D, P(0.0))
+                push!(prbDa, Di.(probe)) 
             end
+            println(prbDa)
+            prbDa = Matrix(prbDa)
+            writedlm("da_k_randPh.csv", prbDa, ',')
         end
     end
 end
@@ -213,17 +249,17 @@ B = 1000
 L = 10000
 partition = (50,50)
 domain = (0,B,0,L)
-model = GmshDiscreteModel("swe-solver/meshes/1000x10000periodic.msh")
-# model = CartesianDiscreteModel(domain,partition;isperiodic=(false,true)) 
-# labels = get_face_labeling(model)
-# add_tag_from_tags!(labels,"bottom",[1,2,5])
-# add_tag_from_tags!(labels,"left",[7])
-# add_tag_from_tags!(labels,"right",[8])
-# add_tag_from_tags!(labels,"top",[3,4,6])
-# add_tag_from_tags!(labels,"inside",[9])
+# model = GmshDiscreteModel("swe-solver/meshes/1000x10000periodic.msh")
+model = CartesianDiscreteModel(domain,partition;isperiodic=(false,true)) 
+labels = get_face_labeling(model)
+add_tag_from_tags!(labels,"bottom",[1,2,5])
+add_tag_from_tags!(labels,"left",[7])
+add_tag_from_tags!(labels,"right",[8])
+add_tag_from_tags!(labels,"top",[3,4,6])
+add_tag_from_tags!(labels,"inside",[9])
 DC = ["left","right"]
-Tend = 44700
-dt = 480
+Tend = 2
+dt = 0.5
 #=
 Input:
 order       = order of FE polynomials
