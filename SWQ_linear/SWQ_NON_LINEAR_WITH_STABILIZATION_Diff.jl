@@ -17,7 +17,8 @@ using LinearAlgebra
 using LineSearches: BackTracking
 using Gridap.TensorValues: meas
 using CSV, DelimitedFiles
-
+using DataFrames 
+using Tables
 
 #function to solve the equations
 function Shallow_water_equations_newton_solver(
@@ -174,7 +175,7 @@ function Shallow_water_equations_newton_solver(
     ode_solver = ThetaMethod(nls,dt,0.5)
     x = solve(ode_solver,op,uhn,0.0,Tend)  
 
-    
+    end
     #''''''''''''''Saving''''''''''''''##
     if isdir(dir)
         output_file = paraview_collection(joinpath(dir,"1d-topo-output"))do pvd
