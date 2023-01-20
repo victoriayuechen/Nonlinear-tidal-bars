@@ -15,6 +15,50 @@ Parameters:
 Creates a <filename>.msh in the meshes folder.
 """
 function generate_rectangle_mesh(Lx::Float32, Ly::Float32, filename::String, modelname::String, lc::Float32, periodic::Bool)
+    # # Initialise mesh generator 
+    # gmsh.initialize()
+    # gmsh.model.add(modelname)
+
+    # # Add the points 
+    # p1 = gmsh.model.geo.addPoint(0, 0, 0, lc, 1)
+    # p2 = gmsh.model.geo.addPoint(Lx, 0, 0, lc, 2)
+    # p3 = gmsh.model.geo.addPoint(Lx, Ly, 0, lc, 3)
+    # p4 = gmsh.model.geo.addPoint(0, Ly, 0, lc, 4)
+    
+    # l1 = gmsh.model.geo.add_line(p1, p2)
+    # l2 = gmsh.model.geo.add_line(p2, p3)
+    # l3 = gmsh.model.geo.add_line(p3, p4)
+    # l4 = gmsh.model.geo.add_line(p4, p1)
+ 
+    # # Create the closed curve loop and the surface
+    # loop = gmsh.model.geo.add_curve_loop([l1, l2, l3, l4])
+    # surf = gmsh.model.geo.add_plane_surface([loop])
+    
+    # gmsh.model.geo.synchronize()
+
+    # # Create the physical domains
+    # gmsh.model.add_physical_group(1, [l1], -1, "bottom")
+    # gmsh.model.add_physical_group(1, [l2], -1, "left")
+    # gmsh.model.add_physical_group(1, [l3], -1, "top")
+    # gmsh.model.add_physical_group(1, [l4], -1, "right")
+    # gmsh.model.add_physical_group(2, [surf])
+
+    # if periodic
+    #     transformation_matrix = zeros(4, 4)
+    #     transformation_matrix[1, 1] = 1
+    #     transformation_matrix[2, 2] = 1 
+    #     transformation_matrix[1, 4] = Lx
+    #     transformation_matrix[3, 3] = 1
+    #     transformation_matrix[4, 4] = 1
+    #     transformation_matrix = vec(transformation_matrix')
+
+    #     gmsh.model.mesh.set_periodic(1, [l2], [l3], transformation_matrix)
+    # end
+
+    # gmsh.model.mesh.generate(2)
+    # gmsh.write(filename)
+    # gmsh.finalize()
+
     # Initialise mesh generator 
     gmsh.initialize()
     gmsh.model.add(modelname)
@@ -40,12 +84,12 @@ function generate_rectangle_mesh(Lx::Float32, Ly::Float32, filename::String, mod
         transformation_matrix = zeros(4, 4)
         transformation_matrix[1, 1] = 1
         transformation_matrix[2, 2] = 1 
-        transformation_matrix[2,4] = -Ly
+        transformation_matrix[1 ,4] = Lx
         transformation_matrix[3, 3] = 1
         transformation_matrix[4, 4] = 1
         transformation_matrix = vec(transformation_matrix')
 
-        gmsh.model.mesh.set_periodic(1, [1], [3], transformation_matrix)
+        gmsh.model.mesh.set_periodic(1, [2], [4], transformation_matrix)
     end
 
     gmsh.model.addPhysicalGroup(0, [1, 2], 1, "bottom")
