@@ -12,5 +12,5 @@ function setup(Param)
 
     @time Initial_solutions = init_sol(X,Param)
 
-    return Initial_solutions, Ω, Y, X, dΩ, dΓ
+    return Initial_solutions, Ω, Y, X, dΩ, dΓ, P
 end

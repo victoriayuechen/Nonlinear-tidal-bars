@@ -1,72 +1,58 @@
 using WriteVTK
 using Gridap
-
+using DataFrames
+using CSV
 
 ##''''''''''''''Save the beauty''''''''''''''##
-function writing_output(dir, x, Ω, Tend)
+function writing_output(dir, x, Ω, Tend, P)
+    x_hep = []
+    y_hep = []
+    i_grid = 0
+    j_grid = 0
+    while i_grid <= 10000
+        append!(x_hep, i_grid)
+        i_grid += 100
+    end
+    while j_grid <= 1000
+        append!(y_hep, j_grid)
+        j_grid += 50
+    end
+    probe = [Point(i, j) for i in x_hep, j in y_hep]
+
+    lDa = zeros(Float64, 1, length(probe))
+    prbDa = DataFrame(lDa, :auto)
+
     if isdir(dir)
         output_file = paraview_collection(joinpath(dir,"1d-topo-output"))do pvd
             for (x,t) in x
-                # if t==Tend
-                #     global xn = x 
-                # end
-                # if t==5000
-                #     global x5000 = x
-                #     println("done $t/$Tend")
-                # end
-                # if t==10000
-                #     global x10000 = x
-                #     println("done $t/$Tend")
-                # end
-                # if t==15000
-                #     global x15000 = x
-                #     println("done $t/$Tend")
-                # end
-                # if t==20000
-                #     global x20000 = x
-                #     println("done $t/$Tend")
-                # end
-                # if t==25000
-                #     global x25000 = x
-                #     println("done $t/$Tend")
-                # end
-                # if t==30000
-                #     global x30000 = x
-                #     println("done $t/$Tend")
-                # end
-                # if t==35000
-                #     global x35000 = x
-                #     println("done $t/$Tend")
-                # end
-                # if t==40000
-                #     global x40000 = x
-                #     println("done $t/$Tend")
-                # end
-                # if t==45000
-                #     global x45000 = x
-                # end
-
+                u,ζ = x
                 if t%(400) ==0
-                    u,ζ = x
                     pvd[t] = createvtk(Ω,joinpath(dir,"1d-topo$t.vtu"),cellfields=["u"=>u,"ζ"=>ζ,"h"=>h])
                     println("Saved")
                     println("done $t/$Tend")
                 end
-                
+                Di = interpolate_everywhere(ζ, P(0.0))
+                push!(prbDa, Di.(probe)) 
             end
+            prbDa = Matrix(prbDa)
+            writedlm("zeta_diff.csv", prbDa, ',')
         end
     else
         mkdir(dir)
         output_file = paraview_collection(joinpath(dir,"1d-topo-output")) do pvd
             for (x,t) in x
+                u,ζ = x
                 if t%(400) ==0
-                    u,ζ = x
                     pvd[t] = createvtk(Ω,joinpath(dir,"1d-topo$t.vtu"),cellfields=["u"=>u,"ζ"=>ζ,"h"=>h])
                     println("Saved")
                     println("done $t/$Tend")
                 end
+                Di = interpolate_everywhere(ζ, P(0.0))
+                push!(prbDa, Di.(probe)) 
 
             end
+            prbDa = Matrix(prbDa)
+            writedlm("zeta_diff.csv", prbDa, ',')
         end
     end
 end

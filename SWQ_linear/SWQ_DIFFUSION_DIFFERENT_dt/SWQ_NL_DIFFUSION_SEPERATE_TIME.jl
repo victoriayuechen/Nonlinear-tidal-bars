@@ -13,10 +13,10 @@ includet("src/SWQ_Write_Output.jl")
 includet("src/SWQ_Setup.jl")
 includet("src/SWQ_Parameters.jl")
 
-function SWES_Diff_dt(Initial_solutions, Ω, Y, X, dΩ, dΓ, Param)
+function SWES_Diff_dt(Initial_solutions, Ω, Y, X, dΩ, dΓ, Param, P)
     @unpack dt1, dt2,dt3, Tstart, Tend1, Tend2,Tend3, theta1, theta2, theta3, dir = Param
-    x1 = solver(Initial_solutions, Y, X, dt1, Tstart, Tend1, theta1, dΩ, dΓ, false,Param)
-    @time writing_output(dir, x1, Ω, Tend1)
+    x1 = solver(Initial_solutions, Y, X, dt1, Tstart, Tend1, theta1, dΩ, dΓ, true,Param)
+    @time writing_output(dir, x1, Ω, Tend1, P)
     
 
     # x2 = solver(xn,Y,X,dt2,Tend1,Tend2, theta2 ,dΩ,dΓ, false,Param)
@@ -60,6 +60,8 @@ Tend3 = undefined --> dt = 40
 
 Param = Parameter(dir = "test4",
     dt1 = 10,
+    x_points = 50,
+    y_points = 10,
     Tend1 = 44700
     )
 Param2 = Parameter(dt1 = 5,
@@ -70,9 +72,9 @@ Param2 = Parameter(dt1 = 5,
 )
 
 #Only first run
-Initial_solutions, Ω, Y, X, dΩ, dΓ = setup(Param)
+Initial_solutions, Ω, Y, X, dΩ, dΓ, P = setup(Param)
 # SWES_Diff_dt(Initial_solutions, Ω, Y, X, dΩ, dΓ,Param2)
 
 
-SWES_Diff_dt(Initial_solutions, Ω, Y, X, dΩ, dΓ,Param)
+SWES_Diff_dt(Initial_solutions, Ω, Y, X, dΩ, dΓ,Param, P)
 
