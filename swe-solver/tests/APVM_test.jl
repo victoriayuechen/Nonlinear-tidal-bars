@@ -1,5 +1,5 @@
 using Revise
-includet("nonlinear_APVM_transient.jl")
+includet("../nonlinear_APVM_transient.jl")
 using Gridap
 using GridapGmsh
 using .MyNonlinearAPVM
@@ -56,7 +56,7 @@ add_tag_from_tags!(labels,"right",[8])
 add_tag_from_tags!(labels,"top",[3,4,6])
 add_tag_from_tags!(labels,"inside",[9])
 DC = ["bottom","top"]
-Tend = 500
+Tend = 44700
 dt = 100
 #=
 Input:

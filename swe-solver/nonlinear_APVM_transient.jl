@@ -5,7 +5,7 @@ using Pkg
 using Gridap
 using SparseMatricesCSR
 using SparseArrays
-using GridapPardiso
+# using GridapPardiso
 using WriteVTK
 using LinearAlgebra
 using LineSearches: BackTracking
@@ -96,11 +96,11 @@ function APVM_run(order,degree,D₀,u₀,topography,forcefunc,dir,periodic::Bool
         U = TransientTrialFESpace(V,[udc,udc])
     end
 
-    reffe_lgn = ReferenceFE(lagrangian,Float64,order-1)
+    reffe_lgn = ReferenceFE(lagrangian,Float64,order)
     Q = TestFESpace(model,reffe_lgn;conformity=:L2)#
     P = TransientTrialFESpace(Q)
 
-    reffe_lgn = ReferenceFE(lagrangian, Float64, order)
+    reffe_lgn = ReferenceFE(lagrangian, Float64, order+1)
     S = TestFESpace(model, reffe_lgn;conformity=:H1)#
     R = TransientTrialFESpace(S)
 
@@ -150,8 +150,22 @@ function APVM_run(order,degree,D₀,u₀,topography,forcefunc,dir,periodic::Bool
     ode_solver = ThetaMethod(nls,dt,0.5)
     x = solve(ode_solver,op,uDn,T0,Tend)
 
-    probe = [Point(2500,500),Point(5000,500)]
+    x_hep = []
+    y_hep = []
+    i_grid = 0
+    j_grid = 0
+    while i_grid <= 10000
+        append!(x_hep, i_grid)
+        i_grid += 100
+    end
+    while j_grid <= 1000
+        append!(y_hep, j_grid)
+        j_grid += 50
+    end
+    probe = [Point(i, j) for i in x_hep, j in y_hep]
     
+    lDa = zeros(Float64, 1, length(probe))
+    prbDa = DataFrame(lDa, :auto)
 
     #Output results
     if isdir(dir)
@@ -159,15 +173,15 @@ function APVM_run(order,degree,D₀,u₀,topography,forcefunc,dir,periodic::Bool
             pvd[0.0] = createvtk(Ω,joinpath(dir,"nonlinear_topo0.0.vtu"),cellfields=["u"=>un,"D"=>(Dn+h),"h"=>h])
             for (x,t) in x
                 u,D,F = x
-                println(u(probe))
-                println(D(probe))
+                # println(u(probe))
+                # println(D(probe))
                 pvd[t] = createvtk(Ω,joinpath(dir,"nonlinear_topo$t.vtu"),cellfields=["u"=>u,"D"=>(D+h),"h"=>h])
                 println("done $t/$Tend")
                 # CSV.write("zeta_grid$t/$.csv",  Tables.table(D(probe)), writeheader=false)
                 Di = interpolate_everywhere(D, P(0.0))
                 push!(prbDa, Di.(probe)) 
             end
-            println(prbDa)
+            # println(prbDa)
             prbDa = Matrix(prbDa)
             writedlm("da_k_randPh.csv", prbDa, ',')
         end
@@ -183,7 +197,7 @@ function APVM_run(order,degree,D₀,u₀,topography,forcefunc,dir,periodic::Bool
                 Di = interpolate_everywhere(D, P(0.0))
                 push!(prbDa, Di.(probe)) 
             end
-            println(prbDa)
+            # println(prbDa)
             prbDa = Matrix(prbDa)
             writedlm("da_k_randPh.csv", prbDa, ',')
         end
