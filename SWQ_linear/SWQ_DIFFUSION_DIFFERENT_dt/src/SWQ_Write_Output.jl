@@ -9,7 +9,7 @@ function writing_output(dir, x, Ω, Tend, P)
     x_hep = []
     y_hep = []
     i_grid = 0
-    j_grid = 0
+    j_grid = 25
     while i_grid <= 10000
         append!(x_hep, i_grid)
         i_grid += 100
