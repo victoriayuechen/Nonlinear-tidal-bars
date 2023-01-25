@@ -175,7 +175,23 @@ function Shallow_water_equations_newton_solver(
     ode_solver = ThetaMethod(nls,dt,0.5)
     x = solve(ode_solver,op,uhn,0.0,Tend)  
 
+    x_hep_test = []
+    y_hep_test = []
+    i_grid_test = 0
+    j_grid_test = 12.5
+    while i_grid_test < 10000
+        append!(x_hep_test, i_grid_test)
+        i_grid_test += 50
     end
+    while j_grid_test < 990
+        append!(y_hep_test, j_grid_test)
+        j_grid_test += 12.5
+    end
+    probe = [Point(i, j) for i in x_hep_test, j in y_hep_test]
+        
+    lDa = zeros(Float64, 1, length(probe))
+    prbDa = DataFrame(lDa, :auto)
+
     #''''''''''''''Saving''''''''''''''##
     if isdir(dir)
         output_file = paraview_collection(joinpath(dir,"1d-topo-output"))do pvd
@@ -184,9 +200,14 @@ function Shallow_water_equations_newton_solver(
                     u,ζ = x
                     pvd[t] = createvtk(Ω,joinpath(dir,"1d-topo$t.vtu"),cellfields=["u"=>u,"ζ"=>ζ,"h"=>h])
                     println("Saved")
+                    Di = interpolate_everywhere(ζ, P(0.0))
+                    push!(prbDa, Di.(probe))
                 end
                 println("done $t/$Tend")
             end
+            prbDa = Matrix(prbDa)
+            writedlm("Diffusion_zeta.csv", prbDa, ',')
+
         end
     else
         mkdir(dir)
@@ -196,9 +217,13 @@ function Shallow_water_equations_newton_solver(
                     u,ζ = x
                     pvd[t] = createvtk(Ω,joinpath(dir,"1d-topo$t.vtu"),cellfields=["u"=>u,"ζ"=>ζ,"h"=>h])
                     println("Saved")
+                    Di = interpolate_everywhere(ζ, P(0.0))
+                    push!(prbDa, Di.(probe))
                 end
                 println("done $t/$Tend")
             end
+            prbDa = Matrix(prbDa)
+            writedlm("Diffusion_zeta.csv", prbDa, ',')
         end
     end
 end
