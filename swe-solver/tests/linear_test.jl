@@ -9,7 +9,7 @@ function ζ₀((x,y))
     ```
     Function of initial ζ
     ```
-    h =0.01*exp(-0.1*(x-30)^2 -0.1*(y-50)^2)
+    h =0.01*exp(-0.1*(x-50)^2 -0.1*(y-30)^2)
     h
 end
 
@@ -34,7 +34,10 @@ end
 #################
 order = 1
 degree = 4
-model = CartesianDiscreteModel((0,B,0,L),partition;isperiodic=(true,false))
+B = 100 #Height of rectangle
+L = 100 #Width of rectangle
+partition = (100,100)
+model = CartesianDiscreteModel((0,L,0,B),partition;isperiodic=(true,false))
 #Make labels
 labels = get_face_labeling(model)
 add_tag_from_tags!(labels,"bottom",[1,2,5])
@@ -43,15 +46,15 @@ add_tag_from_tags!(labels,"right",[8])
 add_tag_from_tags!(labels,"top",[3,4,6])
 add_tag_from_tags!(labels,"inside",[9])
 DC = ["bottom","top"]
-filename = "test1"
-dir = "output_swe/linear_SWE/test1"
+filename = "test"
+dir = "output_swe/linear_SWE/test"
 H = 0.5
 latitude = 50
-Tend = 10
+Tend = 20
 dt =  0.1
 ################
 
 
 time_1 = time()
-run_linear_SWE(order,degree,ζ₀,u₀,forcefunc,Tend,dt,model,H,DC,dir,latitude)
+run_linear_SWE(order,degree,ζ₀,u₀,forcefunc,Tend,dt,model,H,DC,dir,latitude,filename)
 println(time() - time_1)

@@ -1,11 +1,5 @@
 module MyLinearSWE
 using Gridap
-using WriteVTK
-using LineSearches: BackTracking
-using GridapGmsh
-# include("mesh_generator.jl")
-# using .MyMeshGenerator
-
 export run_linear_SWE 
 
 function perp(u)
