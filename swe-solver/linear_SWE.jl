@@ -9,18 +9,24 @@ using GridapGmsh
 export run_linear_SWE 
 
 function perp(u)
+    ````
+    Perpendicular operator
+    ```
     p = VectorValue(-u[2],u[1])
     p
 end
 
 function uζ(u₀,ζ₀,X,Y,dΩ)
+    ```
+    Function that creates initial solution
+    ```
     a((u,ζ),(w,ϕ)) = ∫(w⋅u +ϕ*ζ)dΩ
     b((w,ϕ)) = ∫(w⋅u₀ + ϕ*ζ₀)dΩ
     solve(AffineFEOperator(a,b,X,Y))
 end
 
 
-function run_linear_SWE(order,degree,ζ₀,u₀,forcefunc,Tend,dt,model,H,DC,dir,latitude,filename,tcapture)
+function run_linear_SWE(order,degree,ζ₀,u₀,forcefunc,Tend,dt,model,H,DC,dir,latitude,filename)
 
     #Parameters 
     η = 7.29e-5
@@ -29,7 +35,6 @@ function run_linear_SWE(order,degree,ζ₀,u₀,forcefunc,Tend,dt,model,H,DC,dir
 
     Ω = Triangulation(model)
     dΩ = Measure(Ω,degree)
-    dω = Measure(Ω,degree,ReferenceDomain())
 
 
     #Make reference spaces
@@ -46,7 +51,7 @@ function run_linear_SWE(order,degree,ζ₀,u₀,forcefunc,Tend,dt,model,H,DC,dir
     Y = MultiFieldFESpace([V,Q])
     X = TransientMultiFieldFESpace([U,P])
 
-
+    #Interpolate initial conditions
     x0 = interpolate_everywhere([u₀,ζ₀],X(0.0))
     un,ζn = x0
 
@@ -61,33 +66,29 @@ function run_linear_SWE(order,degree,ζ₀,u₀,forcefunc,Tend,dt,model,H,DC,dir
 
     op = TransientFEOperator(res,jac,jac_t,X,Y)
     nls = LUSolver()
-    ode_solver = ThetaMethod(nls,dt,0.5)#RungeKutta(nls,dt,Symbol("BE_1_0_1"))
+    ode_solver = ThetaMethod(nls,dt,0.5)
     x = solve(ode_solver,op,x0,0.0,Tend)
 
-    if isdir(dir) 
-        output_file = paraview_collection(joinpath(dir,"linear_SWE_$(filename)"))do pvd
-            #pvd[0.0] = createvtk(Ω,joinpath(dir,"linear_SWE_$(filename)_0.0.vtu"),cellfields=["u"=>un,"ζ"=>(ζn)])
+    if isdir(dir)
+        createpvd(joinpath(dir,"linear_SWE")) do pvd
+            pvd[0.0] = createvtk(Ω,joinpath(dir,"linear_SWE_$(filename)_0.0.vtu"),cellfields=["u"=>un,"ζ"=>(ζn)])
             for (x,t) in x
-                if (round(t % tcapture,digits=1) == 0.0 || round(t % tcapture,digits=1) == 1.0)
-                    u,ζ = x
-                    pvd[t] = createvtk(Ω,joinpath(dir,"linear_SWE_$(filename)_$t.vtu"),cellfields=["u"=>u,"ζ"=>(ζ)])
-                    println("done $t/$Tend")
-                end
+                u,ζ = x
+                pvd[t] = createvtk(Ω,joinpath(dir,"linear_SWE_$(filename)_$t.vtu"),cellfields=["u"=>u,"ζ"=>(ζ)])
+                println("$t/$Tend")
             end
         end
     else
         mkdir(dir)
-        output_file = paraview_collection(joinpath(dir,"linear_SWE_$(filename)")) do pvd
-            #pvd[0.0] = createvtk(Ω,joinpath(dir,"linear_SWE_$(filename)_0.0.vtu"),cellfields=["u"=>un,"ζ"=>(ζn)])
+        createpvd(joinpath(dir,"linear_SWE")) do pvd
+            pvd[0.0] = createvtk(Ω,joinpath(dir,"linear_SWE_$(filename)_0.0.vtu"),cellfields=["u"=>un,"ζ"=>(ζn)])
             for (x,t) in x
-                if (round(t % tcapture,digits=1) == 0.0 || round(t % tcapture,digits=1) == 1.0)
-                    u,ζ = x
-                    pvd[t] = createvtk(Ω,joinpath(dir,"linear_SWE_$(filename)_$t.vtu"),cellfields=["u"=>u,"ζ"=>(ζ)])
-                    println("done $t/$Tend")
-                end
+                u,ζ = x
+                pvd[t] = createvtk(Ω,joinpath(dir,"linear_SWE_$(filename)_$t.vtu"),cellfields=["u"=>u,"ζ"=>(ζ)])
+                println("$t/$Tend")
             end
         end
     end
 end
-end
+end#end module
 

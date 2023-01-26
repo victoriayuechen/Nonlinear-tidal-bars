@@ -1,37 +1,57 @@
 
 using Gridap
-using GridapGmsh
 
 includet("../linear_SWE.jl")
 using .MyLinearSWE
+
+
 function ζ₀((x,y))
+    ```
+    Function of initial ζ
+    ```
     h =0.01*exp(-0.1*(x-30)^2 -0.1*(y-50)^2)
     h
 end
 
 function u₀((x,y))
+    ```
+    Function of initial u
+    ```
     u = VectorValue(0.0,0.0)
     u
 end
 
 function forcefunc((x,y),t)
-    f = VectorValue(0.0,0.0*cos(π*(1/5)*t))
+    ```
+    Forcing functions
+    ```
+    f = VectorValue(0.0,0.0)
     f
 end
 
 
+#Parameters
+#################
 order = 1
 degree = 4
-model = GmshDiscreteModel("swe-solver/meshes/ref.msh")
+model = CartesianDiscreteModel((0,B,0,L),partition;isperiodic=(true,false))
+#Make labels
+labels = get_face_labeling(model)
+add_tag_from_tags!(labels,"bottom",[1,2,5])
+add_tag_from_tags!(labels,"left",[7])
+add_tag_from_tags!(labels,"right",[8])
+add_tag_from_tags!(labels,"top",[3,4,6])
+add_tag_from_tags!(labels,"inside",[9])
 DC = ["bottom","top"]
 filename = "test1"
 dir = "output_swe/linear_SWE/test1"
 H = 0.5
 latitude = 50
-Tend = 50
-dt = 1
-tcapture = 1.0
+Tend = 10
+dt =  0.1
+################
+
 
 time_1 = time()
-run_linear_SWE(order,degree,ζ₀,u₀,forcefunc,Tend,dt,model,H,DC,dir,latitude,filename,tcapture::Float64)
+run_linear_SWE(order,degree,ζ₀,u₀,forcefunc,Tend,dt,model,H,DC,dir,latitude)
 println(time() - time_1)
