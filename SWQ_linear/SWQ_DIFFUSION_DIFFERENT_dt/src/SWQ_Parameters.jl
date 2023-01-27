@@ -13,12 +13,12 @@ using Parameters
     degree::Int = 4
 
     ##''''''''''''''Boundary Condition''''''''''''''##
-    periodic_x = true
-    periodic_y = false
-    dirichlet_mask_x_1 = false
-    dirichlet_mask_y_1 = true
-    dirichlet_mask_x_2 = false
-    dirichlet_mask_y_2 = true
+    periodic_x::Bool = true
+    periodic_y::Bool = false
+    dirichlet_mask_x_1::Bool = false
+    dirichlet_mask_y_1::Bool = true
+    dirichlet_mask_x_2::Bool = false
+    dirichlet_mask_y_2::Bool = true
 
     ##''''''''''''''Initial_solutions''''''''''''''##
     u_x::Float64 = 0.0
@@ -55,11 +55,11 @@ using Parameters
 
 
     ##''''''''''''''Saving''''''''''''''##
-    save_CSV = true                                 #Want to save to CSV? Set true
-    nx_start = 0                                    #Start point for savind CSV y-direction
-    ny_start = 25                                   #Start point for savind CSV y-direction
-    nx = 100                                        #Number of points for saving CSV x-direction
-    ny = 20                                         #Number of points for saving CSV y-direction
+    save_CSV::Bool = true                                 #Want to save to CSV? Set true
+    nx_start::Real = 0                                    #Start point for savind CSV y-direction
+    ny_start::Real = 25                                   #Start point for savind CSV y-direction
+    nx::Real = 100                                        #Number of points for saving CSV x-direction
+    ny::Real = 20                                         #Number of points for saving CSV y-direction
 
 
     ##''''''''''''''control parameters''''''''''''''##
