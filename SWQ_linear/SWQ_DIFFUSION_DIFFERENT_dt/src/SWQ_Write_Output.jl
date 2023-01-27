@@ -2,70 +2,71 @@ using WriteVTK
 using Gridap
 
 
-##''''''''''''''Save the beauty''''''''''''''##
-function writing_output(dir, x, Ω, Tend)
-    if isdir(dir)
-        output_file = paraview_collection(joinpath(dir,"1d-topo-output"))do pvd
-            for (x,t) in x
-                # if t==Tend
-                #     global xn = x 
-                # end
-                # if t==5000
-                #     global x5000 = x
-                #     println("done $t/$Tend")
-                # end
-                # if t==10000
-                #     global x10000 = x
-                #     println("done $t/$Tend")
-                # end
-                # if t==15000
-                #     global x15000 = x
-                #     println("done $t/$Tend")
-                # end
-                # if t==20000
-                #     global x20000 = x
-                #     println("done $t/$Tend")
-                # end
-                # if t==25000
-                #     global x25000 = x
-                #     println("done $t/$Tend")
-                # end
-                # if t==30000
-                #     global x30000 = x
-                #     println("done $t/$Tend")
-                # end
-                # if t==35000
-                #     global x35000 = x
-                #     println("done $t/$Tend")
-                # end
-                # if t==40000
-                #     global x40000 = x
-                #     println("done $t/$Tend")
-                # end
-                # if t==45000
-                #     global x45000 = x
-                # end
+##''''''''''''''Save function''''''''''''''##
+function writing_output(dir, name, x, Ω, Tend, P, Param, spinup_save, h, save_CSV)
+    @unpack T_save, B, L, nx_start, ny_start, nx, ny, CSVname = Param
+    if save_CSV
+        x_hep = []
+        y_hep = []
+        i_grid = nx_start
+        j_grid = ny_start
+        while i_grid <= L
+            append!(x_hep, i_grid)
+            i_grid += B/nx
+        end
+        while j_grid <= B
+            append!(y_hep, j_grid)
+            j_grid += L/ny
+        end
+        probe = [Point(i, j) for i in x_hep, j in y_hep]
+        
+        lDa = zeros(Float64, 1, length(probe))
+        prbDa = DataFrame(lDa, :auto)
+    end
 
-                if t%(400) ==0
+    if isdir(dir)
+        output_file = paraview_collection(joinpath(dir,name))do pvd
+            for (x,t) in x
+                if t==Tend && spinup_save
+                    global spinup_solution = x
+                end
+                if t%(T_save) ==0
                     u,ζ = x
-                    pvd[t] = createvtk(Ω,joinpath(dir,"1d-topo$t.vtu"),cellfields=["u"=>u,"ζ"=>ζ,"h"=>h])
-                    println("Saved")
-                    println("done $t/$Tend")
+                    pvd[t] = createvtk(Ω,joinpath(dir,"1d-topo$t.vtu"),cellfields=["u"=>u,"ζ"=>ζ])
+                    println("Done $t/$Tend")
+                    if save_CSV
+                        Di = interpolate_everywhere(ζ, P(0.0))
+                        push!(prbDa, Di.(probe))
+                    end
                 end
                 
+            end
+            if save_CSV
+                prbDa = Matrix(prbDa)
+                writedlm(CSVname, prbDa, ',')
             end
         end
     else
         mkdir(dir)
-        output_file = paraview_collection(joinpath(dir,"1d-topo-output")) do pvd
+        output_file = paraview_collection(joinpath(dir,name)) do pvd
             for (x,t) in x
-                if t%(400) ==0
-                    u,ζ = x
-                    pvd[t] = createvtk(Ω,joinpath(dir,"1d-topo$t.vtu"),cellfields=["u"=>u,"ζ"=>ζ,"h"=>h])
-                    println("Saved")
-                    println("done $t/$Tend")
+                if t==Tend && spinup_save
+                    global spinup_solution = x 
                 end
-
+                
+                if t%(T_save) ==0
+                    u,ζ = x
+                    pvd[t] = createvtk(Ω,joinpath(dir,"1d-topo$t.vtu"),cellfields=["u"=>u,"ζ"=>ζ])
+                    println("Done $t/$Tend")
+                    if save_CSV
+                        Di = interpolate_everywhere(ζ, P(0.0))
+                        push!(prbDa, Di.(probe))
+                    end
+                end
+            end
+            if save_CSV
+                prbDa = Matrix(prbDa)
+                writedlm(CSVname, prbDa, ',')
             end
         end
     end

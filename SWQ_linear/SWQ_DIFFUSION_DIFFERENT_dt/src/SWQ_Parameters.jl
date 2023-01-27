@@ -12,23 +12,28 @@ using Parameters
     order::Int = 1
     degree::Int = 4
 
+    ##''''''''''''''Boundary Condition''''''''''''''##
+    periodic_x = true
+    periodic_y = false
+    dirichlet_mask_x_1 = false
+    dirichlet_mask_y_1 = true
+    dirichlet_mask_x_2 = false
+    dirichlet_mask_y_2 = true
+
     ##''''''''''''''Initial_solutions''''''''''''''##
     u_x::Float64 = 0.0
     u_y::Float64 = 0.0
     ζₙ::Float64 = 0.0
 
     ##''''''''''''''Timestepping''''''''''''''##
-    dt1::Real = 5 #10
-    dt2::Real = 10
-    dt3::Real = 10
+    dt::Real = 5 
+    dt_spinup::Real = 10
     Tstart::Real = 0.0
-    Tend1::Real = 44700
-    Tend2::Real = 30000
-    Tend3::Real = 40000
-    theta1::Float64 = 0.5
-    theta2::Float64 = 0.5
-    theta3::Float64 = 0.5
+    Tend_spinup::Real = 44700 
+    Tend::Real = 44700
+    theta::Float64 = 0.5
     T_save::Real = 50
+    tolerance::Float64 = 2e-7
 
     ##''''''''''''''Physical parameter''''''''''''''##
     η::Float64 = 7.29e-5                             #angular speed of Earth rotation        (s^(-1))
@@ -43,8 +48,34 @@ using Parameters
     α::Float64 = 1e-6                                #Based on ν
     ν::Float64 = 1e-6                                #From Anna Louka
 
-    ##''''''''''''''Saving directory''''''''''''''##
-    dir = "./test"
+    ##''''''''''''''Saving directory and name''''''''''''''##
+    dir::String = "./test"
+    name::String = "test"
+    CSVname::String = "CSV.csv"
+
+
+    ##''''''''''''''Saving''''''''''''''##
+    save_CSV = true                                 #Want to save to CSV? Set true
+    nx_start = 0                                    #Start point for savind CSV y-direction
+    ny_start = 25                                   #Start point for savind CSV y-direction
+    nx = 100                                        #Number of points for saving CSV x-direction
+    ny = 20                                         #Number of points for saving CSV y-direction
+
+
+    ##''''''''''''''control parameters''''''''''''''##
+    convection_on::Bool = true                      #Convection term 
+    coriolis_on::Bool = true                        #Coriolis term
+    friction_on::Bool = true                        #Friction term
+    linear_friction_on::Bool = false                #Linear Friction term
+    gravitional_on::Bool = true                     #Gravitational term
+    forcing_on::Bool = true                         #Forcing function on
+    momentum_on::Bool = true                        #Momentum equation on
+    linear_on::Bool = false                         #Linear momentum equation
+    boundary_on::Bool = true                        #Boundary term
+    stabilization_ζ::Bool = true                    #Stabilization term ζ
+    stabilization_u::Bool = true                    #Stabilization term u 
+    show_iterations::Bool = false                   #Show the iterations
+    
 end
 
 
