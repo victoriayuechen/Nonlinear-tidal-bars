@@ -68,6 +68,8 @@ function writing_output(dir, name, x, Ω, Tend, P, Param, spinup_save, h, save_C
                 prbDa = Matrix(prbDa)
                 writedlm(CSVname, prbDa, ',')
             end
+            prbDa = Matrix(prbDa)
+            writedlm(namecsv, prbDa, ',')
         end
     end
 end
