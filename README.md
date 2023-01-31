@@ -1,3 +1,4 @@
+![](imgs/ripple.gif)
 # Shallow Water Equations Solver
 
 This is a repository for a shallow water equations solver written in Julia. 
