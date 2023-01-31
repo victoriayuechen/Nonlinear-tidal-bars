@@ -1,10 +1,8 @@
-using Pkg
-Pkg.activate(".")
 
+module MylinearSWETopo
 using Gridap
-using WriteVTK
-using LineSearches: BackTracking
 
+export linear_SWE_topo
 
 function perp(u)
     p = VectorValue(-u[2],u[1])
@@ -12,17 +10,13 @@ function perp(u)
 end
 
 
-function linear_SWE(order,degree,ζ₀,u₀,topography,forcefunc,Tend,dt,model,H,DC,dir,latitude)
+function linear_SWE_topo(order,degree,ζ₀,u₀,topography,forcefunc,Tend,dt,model,H,DC,dir,latitude,filename)
     η = 7.29e-5
     f = 2*η*sin(latitude*(π/180))
     g = 9.81
 
     Ω = Triangulation(model)
     dΩ = Measure(Ω,degree)
-    dω = Measure(Ω,degree,ReferenceDomain())
-    Γ = BoundaryTriangulation(model,tags=DC)
-    nΓ = get_normal_vector(Γ)
-    dΓ = Measure(Γ,degree)
 
 
     #Make reference spaces
@@ -54,65 +48,27 @@ function linear_SWE(order,degree,ζ₀,u₀,topography,forcefunc,Tend,dt,model,H
     ode_solver = ThetaMethod(nls,dt,0.5)
     x = solve(ode_solver,op,x0,0.0,Tend)
 
+
+
     if isdir(dir)
-        output_file = paraview_collection(joinpath(dir,"linear_topo"))do pvd
-            pvd[0.0] = createvtk(Ω,joinpath(dir,"linear_topo0.0.vtu"),cellfields=["u"=>un,"ζ"=>(ζn)])
+        createpvd(joinpath(dir,"linear_SWE_topo")) do pvd
+            pvd[0.0] = createvtk(Ω,joinpath(dir,"linear_SWE_topo_$(filename)_0.0.vtu"),cellfields=["u"=>un,"ζ"=>(ζn)])
             for (x,t) in x
                 u,ζ = x
-                pvd[t] = createvtk(Ω,joinpath(dir,"linear_topo$t.vtu"),cellfields=["u"=>u,"ζ"=>(ζ)])
-                println("done $t/$Tend")
+                pvd[t] = createvtk(Ω,joinpath(dir,"linear_SWE_topo_$(filename)_$t.vtu"),cellfields=["u"=>u,"ζ"=>(ζ)])
+                println("$t/$Tend")
             end
         end
     else
         mkdir(dir)
-        output_file = paraview_collection(joinpath(dir,"linear_topo")) do pvd
-            pvd[0.0] = createvtk(Ω,joinpath(dir,"linear_topo0.0.vtu"),cellfields=["u"=>un,"ζ"=>(ζn)])
+        createpvd(joinpath(dir,"linear_SWE_topo")) do pvd
+            pvd[0.0] = createvtk(Ω,joinpath(dir,"linear_SWE_topo_$(filename)_0.0.vtu"),cellfields=["u"=>un,"ζ"=>(ζn)])
             for (x,t) in x
                 u,ζ = x
-                pvd[t] = createvtk(Ω,joinpath(dir,"linear_topo$t.vtu"),cellfields=["u"=>u,"ζ"=>(ζ)])
-                println("done $t/$Tend")
+                pvd[t] = createvtk(Ω,joinpath(dir,"linear_SWE_topo_$(filename)_$t.vtu"),cellfields=["u"=>u,"ζ"=>(ζ)])
+                println("$t/$Tend")
             end
         end
     end
 end
-
-function h₀((x,y))
-    h = 0.05*exp(-0.01*(x-50)^2 -0.01*(y-25)^2)
-    h
-end
-
-function forcefunc((x,y),t)
-    func = VectorValue(0.0,0.0)
-    func
-end
-function u₀((x,y))
-    u = VectorValue(0.0,0.0)
-    u
-end
-
-function topography((x,y))
-    b = 0.4*exp(-0.01*(y-50)^2)
-    b
-end
-
-Tend = 50
-dt = 0.5
-order = 1
-degree = 4
-B = 100
-L = 100
-partition = (50,50)
-model = CartesianDiscreteModel((0,B,0,L),partition;isperiodic=(false,true))
-#Make labels
-labels = get_face_labeling(model)
-add_tag_from_tags!(labels,"bottom",[1,2,5])
-add_tag_from_tags!(labels,"left",[7])
-add_tag_from_tags!(labels,"right",[8])
-add_tag_from_tags!(labels,"top",[3,4,6])
-add_tag_from_tags!(labels,"inside",[9])
-DC = ["left","right"]
-dir = "swe-solver/output_linear_topo_swe"
-H = 0.5
-latitude = 52
-
-linear_SWE(order,degree,h₀,u₀,topography,forcefunc,Tend,dt,model,H,DC,dir,latitude)
+end #module

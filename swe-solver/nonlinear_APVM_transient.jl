@@ -5,6 +5,7 @@ Pkg.activate(".")
 using Gridap
 using SparseMatricesCSR
 using SparseArrays
+using GridapPardiso
 using WriteVTK
 using LinearAlgebra
 using LineSearches: BackTracking
@@ -17,8 +18,8 @@ using Gridap.TensorValues: meas
 export APVM_run
 
 function uD(u₀,D₀,F₀,q₀,X,Y,dΩ)
-    a((u,D,r,u2),(w,ϕ,ϕ2,w2)) = ∫(w⋅u + ϕ*D + w2⋅u2 + ϕ2*r)dΩ
-    b((w,ϕ,ϕ2,w2)) = ∫(w⋅u₀ + ϕ*D₀ + w2⋅F₀ + q₀*ϕ2)dΩ
+    a((u,D,r,u2),(w,ϕ,γ,w2)) = ∫(w⋅u + ϕ*D + w2⋅u2 + γ*r)dΩ
+    b((w,ϕ,γ,w2)) = ∫(w⋅u₀ + ϕ*D₀ + w2⋅F₀ + q₀*γ)dΩ
     solve(AffineFEOperator(a,b,X(0.0),Y))
 end
 
@@ -92,11 +93,11 @@ function APVM_run(order,degree,D₀,u₀,topography,forcefunc,dir,periodic::Bool
         U = TransientTrialFESpace(V,[udc,udc])
     end
 
-    reffe_lgn = ReferenceFE(lagrangian,Float64,order)
+    reffe_lgn = ReferenceFE(lagrangian,Float64,order-1)
     Q = TestFESpace(model,reffe_lgn;conformity=:L2)#
     P = TransientTrialFESpace(Q)
 
-    reffe_lgn = ReferenceFE(lagrangian, Float64, order+1)
+    reffe_lgn = ReferenceFE(lagrangian, Float64, order)
     S = TestFESpace(model, reffe_lgn;conformity=:H1)#
     R = TransientTrialFESpace(S)
 
@@ -136,22 +137,27 @@ function APVM_run(order,degree,D₀,u₀,topography,forcefunc,dir,periodic::Bool
     dnorm(u,du) = u ⋅ du / norm(u)
 
     #Define residual, jacobian in space and time
-    res(t,(u,D,q,F),(w,ϕ,ϕ2,w2)) = ∫(∂t(u)⋅w + ((q-τ*(u⋅∇(q)))*(perp∘(F)))⋅w - (∇⋅(w))*(g*(D+h) + 0.5*(u⋅u)) + ∂t(D)*ϕ + w2⋅(F-u*D) + ϕ2*(q*D) +  (perp∘(∇(ϕ2)))⋅u - (ϕ2*fn) + ϕ*(∇⋅(F))- forcfunc(t)⋅w + ((cd*(norm(u))*u)/(D+1e-14))⋅w)dΩ + ∫((g*(D+h) + 0.5*(u⋅u))*(w⋅nΓ) + nΓ⋅(perp∘(u))*ϕ2)dΓ 
-    jac(t,(u,D,q,F),(du,dD,dq,dF),(w,ϕ,ϕ2,w2)) = ∫(((dq - τ*(u⋅∇(dq) + du⋅∇(q)))*(perp∘(F)))⋅w + ((q-τ*(u⋅∇(q)))*(perp∘(dF)))⋅w - (∇⋅(w))*(g*(dD) + (du⋅u)) + w2⋅(dF - du*D - dD*u) + ϕ2*(q*dD) + ϕ2*(dq*D) + du⋅(perp∘(∇(ϕ2))) + ϕ*(∇⋅(dF)) + (cd*(dnorm(u,du)*u)/(D+h+1e-14) + cd*(norm(u)/(D+h+1e-14)*du) - cd*(norm(u)*u*dD)/((D+h+1e-14)*(D+h+1e-14)))⋅w )dΩ+ ∫((g*(dD) + (du⋅u))*(w⋅nΓ) + nΓ⋅(perp∘(du))*ϕ2)dΓ
+    res(t,(u,D,q,F),(w,ϕ,γ,w2)) = ∫(∂t(u)⋅w + ((q-τ*(u⋅∇(q)))*(perp∘(F)))⋅w - (∇⋅(w))*(g*(D+h) + 0.5*(u⋅u)) + ∂t(D)*ϕ + w2⋅(F-u*D) + γ*(q*D) + (perp∘(∇(γ)))⋅u - (γ*fn)- forcfunc(t)⋅w +  ϕ*(∇⋅(F)) + ((cd*(norm(u))*u)/(D+1e-14))⋅w)dΩ + ∫((g*(D+h) + 0.5*(u⋅u))*(w⋅nΓ) + nΓ⋅(perp∘(u))*γ)dΓ
+    jac(t,(u,D,q,F),(du,dD,dq,dF),(w,ϕ,γ,w2)) = ∫(((dq - τ*(u⋅∇(dq) + du⋅∇(q)))*(perp∘(F)))⋅w + ((q-τ*(u⋅∇(q)))*(perp∘(dF)))⋅w - (∇⋅(w))*(g*(dD) + (du⋅u)) + w2⋅(dF - du*D - dD*u) + γ*(q*dD) + γ*(dq*D) + du⋅(perp∘(∇(γ))) +  ϕ*(∇⋅(dF))  + (cd*(dnorm(u,du)*u)/(D+h+1e-14) + cd*(norm(u)/(D+h+1e-14)*du) - cd*(norm(u)*u*dD)/((D+h+1e-14)*(D+h+1e-14)))⋅w )dΩ+ ∫((g*(dD) + (du⋅u))*(w⋅nΓ) + nΓ⋅(perp∘(du))*γ)dΓ#
     jac_t(t,(u,D),(dut,dDt),(w,ϕ)) = ∫(dut⋅w + dDt*ϕ)dΩ
 
     #Define operators and solvers
     op = TransientFEOperator(res,jac,jac_t,X,Y)
-    nls = NLSolver(show_trace=true,method =:trust_region)
+    nls = NLSolver(show_trace=true,method =:newton,linesearch = BackTracking())
     ode_solver = ThetaMethod(nls,dt,0.5)
     x = solve(ode_solver,op,uDn,T0,Tend)
 
+    probe = [Point(2500,500),Point(5000,500)]
+    
+    
     #Output results
     if isdir(dir)
         output_file = paraview_collection(joinpath(dir,"nonlinear_topo"))do pvd
             pvd[0.0] = createvtk(Ω,joinpath(dir,"nonlinear_topo0.0.vtu"),cellfields=["u"=>un,"D"=>(Dn+h),"h"=>h])
             for (x,t) in x
                 u,D,F = x
+                println(u(probe))
+                println(D(probe))
                 pvd[t] = createvtk(Ω,joinpath(dir,"nonlinear_topo$t.vtu"),cellfields=["u"=>u,"D"=>(D+h),"h"=>h])
                 println("done $t/$Tend")
             end
