@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<VTKFile type="Collection" version="1.0" byte_order="LittleEndian" compressor="vtkZLibDataCompressor">
+  <Collection>
+    <DataSet timestep="50.0" part="0" file="1d-topo50.0.vtu"/>
+  </Collection>
+</VTKFile>
