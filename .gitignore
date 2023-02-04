@@ -3,4 +3,6 @@ output/
 *.DS_Store
 *.vtu
 *.pvd
+*.vti
+Hepkema-Implementation
 *.vts
