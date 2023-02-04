@@ -1,7 +1,3 @@
-using Pkg
-Pkg.activate(".")
-#create a new local environment, using my custom version of GridapPETSc
-#] add https://github.com/carlodev/GridapPETSc.jl
 
 using Gridap
 using GridapDistributed
@@ -10,6 +6,8 @@ using WriteVTK
 using LineSearches: BackTracking
 using GridapPETSc
 using GridapPETSc: PETSC
+using BenchmarkTools
+
 
 function perp(u)
     p = VectorValue(-u[2],u[1])
@@ -23,7 +21,7 @@ function uζ(u₀,ζ₀,X,Y,dΩ)
 end
 
 function ζ₀((x,y))
-    h =0.05*exp(-0.01*(x-25)^2 -0.01*(y-25)^2)
+    h =0.01*exp(-0.1*(x-50)^2 -0.1*(y-30)^2)
     h
 end
 
@@ -41,20 +39,20 @@ order = 1
 degree = 4
 
 options = """ 
-    -snes_type newtonls
-    -snes_linesearch_type basic
-    -snes_linesearch_damping 1.0
-    -snes_rtol 1.0e-8
-    -snes_atol 0.0
-    -snes_monitor
-    -snes_converged_reason
-    -mm_ksp_type cg
-    -mm_ksp_monitor
-    -mm_ksp_rtol 1.0e-10
-    -mm_pc_type jacobi
+    -ksp_type gmres
+    -pc_type bjacobi
+    -pc_factor_mat_ordering amd
+    -sub_pc_type ilu
+    -log_view
 """
 
-function linear_swe(parts)
+# options = """ 
+#     -ksp_type ibcgs
+#     -mpi_pc_type bjacobi
+#     -log_view
+# """
+
+function run_linear_SWE(parts)
     GridapPETSc.with(args=split(options)) do
         #Parameters
         B = 100 
@@ -79,7 +77,7 @@ function linear_swe(parts)
         add_tag_from_tags!(labels,"top",[3,4,6])
         add_tag_from_tags!(labels,"inside",[9])
         DC = ["left","right"]
-        dir = "output3/"
+        dir = "output_linear_SWE/"
         Ω = Triangulation(model)
         dΩ = Measure(Ω,degree)
         dω = Measure(Ω,degree,ReferenceDomain())
@@ -119,29 +117,34 @@ function linear_swe(parts)
         jac_t(t,(u,ζ),(dut,dζt),(w,ϕ)) = ∫(dut⋅w + dζt*ϕ)dΩ
 
         op = TransientFEOperator(res,jac,jac_t,X,Y)
-        nls = PETScNonlinearSolver()
-        Tend = 30
-        ode_solver = ThetaMethod(nls,1.0,0.5)
+        nls = PETScLinearSolver()
+        dt = 0.1
+        Tend = 10
+        ode_solver = ThetaMethod(nls, dt, 0.5)
         x = solve(ode_solver,op,uζn,0.0,Tend)
-
         if isdir(dir)
-            createpvd(parts,joinpath(dir,"third_linear_topo")) do pvd
+            createpvd(parts, joinpath(dir,"linear_topo")) do pvd
                 for (x,t) in x
                     u,ζ = x
-                    pvd[t] = createvtk(Ω, "third_linear_topo_$t"*".vtu", cellfields=["u"=>u,"ζ+H "=>ζ+H])
+                    pvd[t] = createvtk(Ω, joinpath(dir,"linear_topo_$t"*".vtu"), cellfields=["u"=>u,"ζ+H "=>ζ+H])
                 end
             end
         else
             mkdir(dir)
-            createpvd(parts,joinpath(dir,"linear_topo")) do pvd
+            createpvd(parts, joinpath(dir,"linear_topo")) do pvd
                 for (x,t) in x
                     u,ζ = x
-                    pvd[t] = createvtk(Ω, "third_linear_topo_$t"*".vtu", cellfields=["u"=>u,"ζ+H "=>ζ+H])
+                    pvd[t] = createvtk(Ω, joinpath(dir,"linear_topo_$t"*".vtu"), cellfields=["u"=>u,"ζ+H "=>ζ+H])
                 end
             end
         end
     end
 end
 
-partition = (2, 2)
-prun(linear_swe, mpi, partition) # use `sequential` instead of `mpi` for debugging 
+
+using MPI
+MPI.Init()
+partition = (4,1)
+@btime prun(run_linear_SWE, mpi, partition) # use `sequential` instead of `mpi` for debugging
+
+
