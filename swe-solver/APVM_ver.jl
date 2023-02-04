@@ -22,16 +22,16 @@ H = 3.0
 
 W = 1
 L = 1
-#partition = (50,50)
+partition = (50,50)
 domain = (0,L,0,W)
-model = GmshDiscreteModel("swe-solver/meshes/1x1periodic01.msh")
-# model = CartesianDiscreteModel(domain,partition;isperiodic=(true,false)) 
-# labels = get_face_labeling(model)
-# add_tag_from_tags!(labels,"bottom",[1,2,5])
-# add_tag_from_tags!(labels,"left",[7])
-# add_tag_from_tags!(labels,"right",[8])
-# add_tag_from_tags!(labels,"top",[3,4,6])
-# add_tag_from_tags!(labels,"inside",[9])
+#model = GmshDiscreteModel("swe-solver/meshes/1x1periodic01.msh")
+model = CartesianDiscreteModel(domain,partition;isperiodic=(true,false)) 
+labels = get_face_labeling(model)
+add_tag_from_tags!(labels,"bottom",[1,2,5])
+add_tag_from_tags!(labels,"left",[7])
+add_tag_from_tags!(labels,"right",[8])
+add_tag_from_tags!(labels,"top",[3,4,6])
+add_tag_from_tags!(labels,"inside",[9])
 DC = ["bottom","top"]
 Tend = 10
 dt = 1
